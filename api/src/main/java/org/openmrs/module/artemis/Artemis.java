@@ -67,12 +67,9 @@ public class Artemis implements ApplicationContextAware {
 	
 	private volatile boolean shuttingDown = false;
 	
-	private AdministrationService adminService;
-	
 	private ArtemisProperties artemisProperties;
 	
-	public Artemis(AdministrationService adminService, ArtemisProperties artemisProperties) {
-		this.adminService = adminService;
+	public Artemis(ArtemisProperties artemisProperties) {
 		this.artemisProperties = artemisProperties;
 	}
 	
@@ -93,7 +90,7 @@ public class Artemis implements ApplicationContextAware {
 		if (embeddedActiveMQ != null) {
 			return "vm://0"; //Use in-vm
 		} else {
-			return Context.getRuntimeProperties().getProperty(ARTEMIS_URI, adminService.getGlobalProperty(ARTEMIS_URI));
+			return Context.getRuntimeProperties().getProperty(ARTEMIS_URI);
 		}
 	}
 	
@@ -119,8 +116,8 @@ public class Artemis implements ApplicationContextAware {
 				// Configure default DLQ
 				AddressSettings addressSettings = new AddressSettings();
 				addressSettings.setAutoCreateDeadLetterResources(true);
-				addressSettings.setDeadLetterAddress(SimpleString.of("DLQ"));
-				addressSettings.setDeadLetterQueueSuffix(SimpleString.of(".DLQ"));
+				addressSettings.setDeadLetterAddress(SimpleString.toSimpleString("DLQ"));
+				addressSettings.setDeadLetterQueueSuffix(SimpleString.toSimpleString(".DLQ"));
 				addressSettings.setMaxDeliveryAttempts(10);
 				addressSettings.setRedeliveryDelay(250); // Initial delay of 250 ms
 				addressSettings.setRedeliveryMultiplier(2.0); // Double the delay on each subsequent retry
@@ -197,35 +194,7 @@ public class Artemis implements ApplicationContextAware {
 						log.warn("Failed to start Artemis Web Console. Ensure artemis-web dependency and console.war are available.", e);
 					}
 				}
-				
-				int actualPort = 61616;
-				try {
-					RemotingService remotingService = embeddedActiveMQ.getActiveMQServer().getRemotingService();
-					Acceptor tcpAcceptor = remotingService.getAcceptor("tcp");
-					if (tcpAcceptor != null) {
-						actualPort = tcpAcceptor.getActualPort();
-					}
-				}
-				catch (Exception e) {
-					log.warn("Could not determine actual Artemis port, falling back to 61616", e);
-				}
-				
-				String hostAddress = "localhost";
-				try {
-					hostAddress = InetAddress.getLocalHost().getHostAddress();
-				}
-				catch (Exception e) {
-					log.warn("Could not determine local IP address, falling back to localhost", e);
-				}
 
-				try {
-					Context.openSession();
-					Context.addProxyPrivilege(PrivilegeConstants.MANAGE_GLOBAL_PROPERTIES);
-					adminService.saveGlobalProperty(new GlobalProperty(ARTEMIS_URI, "tcp://" + hostAddress + ":" + actualPort));
-				} finally {
-					Context.removeProxyPrivilege(PrivilegeConstants.MANAGE_GLOBAL_PROPERTIES);
-					Context.closeSession();
-				}
 				log.info("Embedded Artemis broker started successfully. Starting to monitor it...");
 				
 				startHealthMonitor();

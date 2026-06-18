@@ -27,7 +27,7 @@
 		<openmrsPlatformVersion>2.9.0-SNAPSHOT</openmrsPlatformVersion>
 		<javaCompilerSource>1.8</javaCompilerSource>
 		<javaCompilerTarget>1.8</javaCompilerTarget>
-		<artemisVersion>2.53.0</artemisVersion>
+		<artemisVersion>2.54.0</artemisVersion>
 	</properties>
 
 	<modules>
@@ -61,10 +61,6 @@
 
 	<dependencyManagement>
 		<dependencies>
-			<!--
-			Specify dependencies as provided so they are not brought by Artemis
-			as compile time dependencies
-			-->
 			<!-- Embedded Artemis dependencies -->
 			<dependency>
 				<groupId>org.apache.activemq</groupId>
@@ -87,6 +83,53 @@
 				<!-- Use version 2.9.3 if compiling for Java 8, or 3.x if on Java 11+ -->
 				<version>2.9.3</version>
 				<scope>test</scope>
+			</dependency>
+
+			<!-- 
+			Force dependencies that are already provided by OpenMRS / Tomcat 
+			to 'provided' scope so they are not packaged in the module's lib folder 
+			-->
+			<dependency>
+				<groupId>org.slf4j</groupId>
+				<artifactId>slf4j-api</artifactId>
+				<version>1.7.30</version>
+				<scope>provided</scope>
+			</dependency>
+			<dependency>
+				<groupId>javax.servlet</groupId>
+				<artifactId>servlet-api</artifactId>
+				<version>2.5</version>
+				<scope>provided</scope>
+			</dependency>
+			<dependency>
+				<groupId>commons-logging</groupId>
+				<artifactId>commons-logging</artifactId>
+				<version>1.2</version>
+				<scope>provided</scope>
+			</dependency>
+			<dependency>
+				<groupId>commons-collections</groupId>
+				<artifactId>commons-collections</artifactId>
+				<version>3.2.2</version>
+				<scope>provided</scope>
+			</dependency>
+			<dependency>
+				<groupId>commons-beanutils</groupId>
+				<artifactId>commons-beanutils</artifactId>
+				<version>1.9.4</version>
+				<scope>provided</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.commons</groupId>
+				<artifactId>commons-lang3</artifactId>
+				<version>3.12.0</version>
+				<scope>provided</scope>
+			</dependency>
+			<dependency>
+				<groupId>jakarta.jms</groupId>
+				<artifactId>jakarta.jms-api</artifactId>
+				<version>2.0.3</version>
+				<scope>provided</scope>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>

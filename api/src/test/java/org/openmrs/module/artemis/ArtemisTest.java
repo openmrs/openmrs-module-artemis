@@ -16,12 +16,14 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.openmrs.GlobalProperty;
 import org.openmrs.api.AdministrationService;
+import org.openmrs.api.context.Context;
 import org.openmrs.api.db.ContextDAO;
 import org.openmrs.test.jupiter.BaseContextMockTest;
 import org.springframework.context.ConfigurableApplicationContext;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -31,12 +33,6 @@ import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
 public class ArtemisTest extends BaseContextMockTest {
-	
-	@Mock
-	private AdministrationService adminService;
-	
-	@Mock
-	private ContextDAO contextDAO;
 	
 	@Mock
 	private ConfigurableApplicationContext applicationContext;
@@ -54,31 +50,33 @@ public class ArtemisTest extends BaseContextMockTest {
 	
 	@Test
 	public void getUsername_shouldReturnUsername() {
-		Artemis artemis = new Artemis(adminService, createProperties(false));
+		Artemis artemis = new Artemis(createProperties(false));
 		assertEquals("testUser", artemis.getUsername());
 	}
 	
 	@Test
 	public void getPassword_shouldReturnPassword() {
-		Artemis artemis = new Artemis(adminService, createProperties(false));
+		Artemis artemis = new Artemis(createProperties(false));
 		assertEquals("testPass", artemis.getPassword());
 	}
 	
 	@Test
 	public void start_shouldNotStartEmbeddedActiveMQIfDisabled() throws Exception {
-		Artemis artemis = new Artemis(adminService, createProperties(false));
+		Artemis artemis = new Artemis(createProperties(false));
 		artemis.start();
-		
-		verifyNoInteractions(adminService);
 	}
 	
 	@Test
 	public void getBrokerUri_shouldReturnUriFromPropertiesWhenNotEmbedded() {
-		Artemis artemis = new Artemis(adminService, createProperties(false));
+		Artemis artemis = new Artemis(createProperties(false));
 		
-		when(adminService.getGlobalProperty("artemis.uri")).thenReturn("tcp://external:61616");
+		Properties runtimeProperties = Context.getRuntimeProperties();
+		runtimeProperties.setProperty("artemis.uri", "tcp://external:61616");
+		Context.setRuntimeProperties(runtimeProperties);
 		
 		assertEquals("tcp://external:61616", artemis.getBrokerUri());
+		
+		runtimeProperties.remove("artemis.uri");
 	}
 	
 	@Test
@@ -86,15 +84,11 @@ public class ArtemisTest extends BaseContextMockTest {
 		Path tempDir = Files.createTempDirectory("artemis-test");
 		System.setProperty("OPENMRS_APPLICATION_DATA_DIRECTORY", tempDir.toAbsolutePath().toString());
 		
-		Artemis artemis = new Artemis(adminService, createProperties(true));
+		Artemis artemis = new Artemis(createProperties(true));
 		artemis.setApplicationContext(applicationContext);
 		try {
 			artemis.start();
 			assertEquals("vm://0", artemis.getBrokerUri());
-			ArgumentCaptor<GlobalProperty> captor = ArgumentCaptor.forClass(GlobalProperty.class);
-			verify(adminService).saveGlobalProperty(captor.capture());
-			assertEquals("artemis.uri", captor.getValue().getProperty());
-			assertTrue(captor.getValue().getPropertyValue().startsWith("tcp://"));
 		}
 		finally {
 			artemis.stop();
