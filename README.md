@@ -30,6 +30,52 @@ The module can be configured via your `openmrs-runtime.properties` file. If no p
 | `artemis.password` | *(empty)* | Password for broker authentication (if required). |
 | `artemis.uri` | *(auto)* | The URI used to connect to the broker. If using an external broker, set this to your broker's URI (e.g., `tcp://external-host:61616`). |
 
+Usage Examples
+--------------
+
+### Publishing an Event
+You can publish messages to an Artemis queue or topic by creating a `BrokerOutgoingEvent` and sending it via the `EventPublisher`. Make sure to specify the `Artemis.BROKER_ID` as the target broker.
+
+```java
+import org.openmrs.event.EventPublisher;
+import org.openmrs.event.broker.BrokerOutgoingEvent;
+import org.openmrs.module.artemis.Artemis;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class MyService {
+    
+    @Autowired
+    private EventPublisher eventPublisher;
+
+    public void notifySomethingHappened() {
+        String payload = "Hello from OpenMRS!";
+        BrokerOutgoingEvent<String> event = new BrokerOutgoingEvent<>(payload, "my.custom.topic", Artemis.BROKER_ID);
+        eventPublisher.publishEvent(event);
+    }
+}
+```
+
+### Listening to an Event
+To consume messages from an Artemis topic or queue, annotate a method in a Spring-managed bean with `@BrokerEventListener`.
+
+```java
+import org.openmrs.event.broker.BrokerEventListener;
+import org.openmrs.event.broker.BrokerIncomingEvent;
+import org.openmrs.module.artemis.Artemis;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MyEventListener {
+
+    @BrokerEventListener(value = "my.custom.topic", broker = Artemis.BROKER_ID)
+    public void handleEvent(BrokerIncomingEvent<String> event) {
+        System.out.println("Received message: " + event.getPayload());
+    }
+}
+```
+
 Building from Source
 --------------------
 You will need to have Java 1.8+ and Maven 2.x+ installed.  Use the command 'mvn package' to 
