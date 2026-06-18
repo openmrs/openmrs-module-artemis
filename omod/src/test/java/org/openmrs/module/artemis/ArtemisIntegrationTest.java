@@ -10,11 +10,12 @@
 package org.openmrs.module.artemis;
 
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.hamcrest.MatcherAssert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openmrs.event.EventPublisher;
 import org.openmrs.event.broker.BrokerOutgoingEvent;
-import org.openmrs.test.jupiter.BaseModuleContextSensitiveTest;
+import org.openmrs.web.test.jupiter.BaseModuleWebContextSensitiveTest;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.concurrent.TimeUnit;
@@ -27,7 +28,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasProperty;
 import static org.openmrs.module.artemis.Artemis.BROKER_ID;
 
-public class ArtemisIntegrationTest extends BaseModuleContextSensitiveTest {
+public class ArtemisIntegrationTest extends BaseModuleWebContextSensitiveTest {
 	
 	@Autowired
 	private EventPublisher eventPublisher;
@@ -53,7 +54,7 @@ public class ArtemisIntegrationTest extends BaseModuleContextSensitiveTest {
 		// Wait for the message to be received by the JMS listener and published to our EventPublisher
 		testListener.await(30, TimeUnit.SECONDS);
 		
-		assertThat(
+		MatcherAssert.assertThat(
 		    testListener.getReceivedEvents(),
 		    hasItems(allOf(hasProperty("payload", equalTo(testPayload))),
 		        allOf(hasProperty("payload", equalTo(testPayload)))));
@@ -74,8 +75,9 @@ public class ArtemisIntegrationTest extends BaseModuleContextSensitiveTest {
 		// Wait for the message to be received by the JMS listener and published to our EventPublisher
 		testListener.await(30, TimeUnit.SECONDS);
 		
-		assertThat(testListener.getReceivedEvents(), hasItems(allOf(hasProperty("payload", equalTo(testPayload)))));
-		assertThat(testListener.getAttempts(), equalTo(3));
+		MatcherAssert.assertThat(testListener.getReceivedEvents(),
+		    hasItems(allOf(hasProperty("payload", equalTo(testPayload)))));
+		MatcherAssert.assertThat(testListener.getAttempts(), equalTo(3));
 	}
 	
 	@Test
@@ -93,8 +95,9 @@ public class ArtemisIntegrationTest extends BaseModuleContextSensitiveTest {
 		// Wait for the message to fail max attempts and be routed to DLQ listener
 		testListener.await(120, TimeUnit.SECONDS);
 		
-		assertThat(testListener.getReceivedEvents(), hasItems(allOf(hasProperty("payload", equalTo(testPayload)))));
-		assertThat(testListener.getDlqAttempts(), equalTo(10)); // Default Artemis max-delivery-attempts is 10
+		MatcherAssert.assertThat(testListener.getReceivedEvents(),
+		    hasItems(allOf(hasProperty("payload", equalTo(testPayload)))));
+		MatcherAssert.assertThat(testListener.getDlqAttempts(), equalTo(10)); // Default Artemis max-delivery-attempts is 10
 	}
 	
 	@Test

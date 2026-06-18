@@ -116,8 +116,8 @@ public class Artemis implements ApplicationContextAware {
 				// Configure default DLQ
 				AddressSettings addressSettings = new AddressSettings();
 				addressSettings.setAutoCreateDeadLetterResources(true);
-				addressSettings.setDeadLetterAddress(SimpleString.toSimpleString("DLQ"));
-				addressSettings.setDeadLetterQueueSuffix(SimpleString.toSimpleString(".DLQ"));
+				addressSettings.setDeadLetterAddress(SimpleString.of("DLQ"));
+				addressSettings.setDeadLetterQueueSuffix(SimpleString.of(".DLQ"));
 				addressSettings.setMaxDeliveryAttempts(10);
 				addressSettings.setRedeliveryDelay(250); // Initial delay of 250 ms
 				addressSettings.setRedeliveryMultiplier(2.0); // Double the delay on each subsequent retry
@@ -170,8 +170,49 @@ public class Artemis implements ApplicationContextAware {
 							}
 						}
 						
-						// Bypass Hawtio's JAAS authentication requirement for embedded setups
-						System.setProperty("hawtio.authenticationEnabled", "false");
+						if (hasCredentials) {
+							File etcDir = new File(dataDirFile, "etc");
+							if (!etcDir.exists()) {
+								etcDir.mkdirs();
+							}
+							
+							// Create JAAS Properties files dynamically based on configured credentials
+							File usersFile = new File(etcDir, "artemis-users.properties");
+							Files.write(usersFile.toPath(), (username + "=" + password + "\n").getBytes());
+							
+							File rolesFile = new File(etcDir, "artemis-roles.properties");
+							Files.write(rolesFile.toPath(), ("amq=" + username + "\n").getBytes());
+							
+							File loginConfig = new File(etcDir, "login.config");
+							
+							String jaasConfig = "activemq {\n" +
+							        "    org.apache.activemq.artemis.spi.core.security.jaas.PropertiesLoginModule required\n" +
+							        "        debug=false\n" +
+							        "        reload=true\n" +
+							        "        org.apache.activemq.jaas.properties.user=\"artemis-users.properties\"\n" +
+							        "        org.apache.activemq.jaas.properties.role=\"artemis-roles.properties\";\n" +
+							        "};\n";
+							Files.write(loginConfig.toPath(), jaasConfig.getBytes());
+							
+							System.setProperty("java.security.auth.login.config", loginConfig.getAbsolutePath());
+							
+							try {
+								// Force Java to reload JAAS configs now that we've set the property
+								javax.security.auth.login.Configuration.getConfiguration().refresh();
+							} catch (Exception e) {
+								log.warn("Failed to refresh JAAS configuration. Artemis Web Console login might fail.", e);
+							}
+							
+							System.setProperty("hawtio.authenticationEnabled", "true");
+							System.setProperty("hawtio.realm", "activemq");
+							System.setProperty("hawtio.role", "amq");
+							System.setProperty("hawtio.roles", "amq");
+							System.setProperty("hawtio.rolePrincipalClasses", "org.apache.activemq.artemis.spi.core.security.jaas.RolePrincipal");
+							System.setProperty("hawtio.userPrincipalClasses", "org.apache.activemq.artemis.spi.core.security.jaas.UserPrincipal");
+						} else {
+							// Bypass Hawtio's JAAS authentication requirement for embedded setups
+							System.setProperty("hawtio.authenticationEnabled", "false");
+						}
 						System.setProperty("hawtio.offline", "true");
 						
 						WebServerDTO webServerDTO = new WebServerDTO();
