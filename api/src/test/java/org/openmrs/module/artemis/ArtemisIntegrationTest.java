@@ -9,24 +9,22 @@
  */
 package org.openmrs.module.artemis;
 
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.openmrs.event.EventPublisher;
 import org.openmrs.event.broker.BrokerOutgoingEvent;
 import org.openmrs.test.jupiter.BaseModuleContextSensitiveTest;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.annotation.DirtiesContext;
-import org.apache.commons.lang.exception.ExceptionUtils;
 
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasProperty;
-import static org.hamcrest.Matchers.containsString;
 import static org.openmrs.module.artemis.Artemis.BROKER_ID;
 
 public class ArtemisIntegrationTest extends BaseModuleContextSensitiveTest {
@@ -100,7 +98,6 @@ public class ArtemisIntegrationTest extends BaseModuleContextSensitiveTest {
 	}
 	
 	@Test
-	@DirtiesContext
 	public void testPublishEventThrowsExceptionOnConnectionFailure() throws Exception {
 		// Stop the embedded broker to simulate a connection failure
 		artemis.stop();
@@ -125,5 +122,7 @@ public class ArtemisIntegrationTest extends BaseModuleContextSensitiveTest {
 		// With initialConnectAttempts=3 and default retryInterval=2000ms, it will pause twice.
 		// 2 pauses * 2000ms = ~4000ms. We use 3500ms to allow for minor OS timer inaccuracies.
 		Assertions.assertTrue(duration >= 3500, "Publishing failed too quickly (" + duration + "ms), indicating retries did not happen.");
+
+		artemis.start();
 	}
 }
