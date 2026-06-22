@@ -10,7 +10,6 @@
 package org.openmrs.module.artemis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.apache.activemq.artemis.jms.client.ActiveMQMessage;
 import org.apache.commons.lang.StringUtils;
 import org.openmrs.event.EventPayload;
@@ -20,6 +19,7 @@ import org.openmrs.event.broker.BrokerIncomingEvent;
 import org.openmrs.event.broker.BrokerOutgoingEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
@@ -32,9 +32,9 @@ import javax.annotation.PreDestroy;
 import javax.jms.Message;
 import javax.jms.MessageListener;
 import javax.jms.TextMessage;
-import java.util.Enumeration;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,37 +58,17 @@ public class ArtemisEventListener {
 	
 	private boolean initialized = false;
 
-	public ArtemisEventListener(Artemis artemis, ObjectMapper objectMapper, EventPublisher eventPublisher,
+	public ArtemisEventListener(ObjectMapper objectMapper, EventPublisher eventPublisher,
 	                            @Value("${event.broker.default:artemis}") String defaultEventBroker,
-	                            BrokerEventListenerFactory listenerFactory) {
+	                            BrokerEventListenerFactory listenerFactory,
+	                            @Qualifier("artemis.ConnectionFactory") CachingConnectionFactory connectionFactory,
+	                            @Qualifier("artemis.JmsTemplate") JmsTemplate jmsTemplate) {
 		this.objectMapper = objectMapper;
 		this.eventPublisher = eventPublisher;
 		this.defaultEventBroker = defaultEventBroker;
 		this.listenerFactory = listenerFactory;
-
-		String brokerUri = artemis.getBrokerUri();
-		if (brokerUri != null && !brokerUri.contains("reconnectAttempts")) {
-			brokerUri += (brokerUri.contains("?") ? "&" : "?") + "reconnectAttempts=3";
-		}
-		if (brokerUri != null && !brokerUri.contains("initialConnectAttempts")) {
-			brokerUri += (brokerUri.contains("?") ? "&" : "?") + "initialConnectAttempts=3";
-		}
-		if (brokerUri != null && !brokerUri.contains("failoverAttempts")) {
-			brokerUri += (brokerUri.contains("?") ? "&" : "?") + "failoverAttempts=3";
-		}
-		
-		ActiveMQConnectionFactory amqFactory = new ActiveMQConnectionFactory(brokerUri);
-		
-		if (StringUtils.isNotBlank(artemis.getUsername()) && StringUtils.isNotBlank(artemis.getPassword())) {
-			amqFactory.setUser(artemis.getUsername());
-			amqFactory.setPassword(artemis.getPassword());
-		}
-		
-		this.connectionFactory = new CachingConnectionFactory(amqFactory);
-		
-		this.jmsTemplate = new JmsTemplate(this.connectionFactory);
-		this.jmsTemplate.setExplicitQosEnabled(true);
-		this.jmsTemplate.setDeliveryPersistent(true);
+		this.connectionFactory = connectionFactory;
+		this.jmsTemplate = jmsTemplate;
 	}
 
 	@EventListener
@@ -222,9 +202,6 @@ public class ArtemisEventListener {
 		try {
 			for (DefaultMessageListenerContainer container : listenerContainers) {
 				container.shutdown();
-			}
-			if (connectionFactory != null) {
-				connectionFactory.destroy();
 			}
 			log.info("ArtemisEventListener disconnected.");
 		} catch (Exception e) {

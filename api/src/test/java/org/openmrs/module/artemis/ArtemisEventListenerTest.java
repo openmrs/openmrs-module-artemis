@@ -10,7 +10,6 @@
 package org.openmrs.module.artemis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -19,6 +18,7 @@ import org.openmrs.event.EventPublisher;
 import org.openmrs.event.broker.BrokerEventListenerFactory;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.jms.connection.CachingConnectionFactory;
+import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.listener.DefaultMessageListenerContainer;
 
 import java.lang.reflect.Field;
@@ -35,9 +35,6 @@ import static org.mockito.Mockito.when;
 public class ArtemisEventListenerTest {
 	
 	@Mock
-	private Artemis artemis;
-	
-	@Mock
 	private ObjectMapper objectMapper;
 	
 	@Mock
@@ -45,13 +42,6 @@ public class ArtemisEventListenerTest {
 	
 	@Mock
 	private BrokerEventListenerFactory listenerFactory;
-	
-	@Before
-	public void setUp() {
-		when(artemis.getBrokerUri()).thenReturn("vm://0");
-		when(artemis.getUsername()).thenReturn("admin");
-		when(artemis.getPassword()).thenReturn("admin");
-	}
 	
 	private BrokerEventListenerFactory.Listener createMockListener(String broker, String source) {
 		BrokerEventListenerFactory.Listener listener = mock(BrokerEventListenerFactory.Listener.class);
@@ -83,11 +73,8 @@ public class ArtemisEventListenerTest {
 		when(listenerFactory.getListeners()).thenReturn(
 		    Arrays.asList(explicitArtemisListener, implicitDefaultListener, otherBrokerListener, duplicateSourceListener));
 		
-		ArtemisEventListener eventListener = new ArtemisEventListener(artemis, objectMapper, eventPublisher, "artemis",
-		        listenerFactory);
-		
-		// Prevent actual JMS connections during the test so it won't hang
-		injectMockConnectionFactory(eventListener);
+		ArtemisEventListener eventListener = new ArtemisEventListener(objectMapper, eventPublisher, "artemis",
+		        listenerFactory, mock(CachingConnectionFactory.class), mock(JmsTemplate.class));
 		
 		eventListener.setupListeners(mock(ContextRefreshedEvent.class));
 		
@@ -115,8 +102,8 @@ public class ArtemisEventListenerTest {
 	public void setupListeners_shouldIgnoreEmptyBrokerIfDefaultIsNotArtemis() throws Exception {
 		BrokerEventListenerFactory.Listener implicitDefaultListener = createMockListener("", "source1");
 		when(listenerFactory.getListeners()).thenReturn(Collections.singletonList(implicitDefaultListener));
-		ArtemisEventListener eventListener = new ArtemisEventListener(artemis, objectMapper, eventPublisher, "otherBroker",
-		        listenerFactory);
+		ArtemisEventListener eventListener = new ArtemisEventListener(objectMapper, eventPublisher, "otherBroker",
+		        listenerFactory, mock(CachingConnectionFactory.class), mock(JmsTemplate.class));
 		injectMockConnectionFactory(eventListener);
 		eventListener.setupListeners(mock(ContextRefreshedEvent.class));
 		List<DefaultMessageListenerContainer> containers = getListenerContainers(eventListener);
