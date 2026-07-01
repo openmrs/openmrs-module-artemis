@@ -16,6 +16,10 @@ Features
 * **Header Propagation**: Preserves message headers end-to-end between OpenMRS events and JMS messages.
 * **External Broker Support**: Can be configured to connect to a standalone/external ActiveMQ Artemis instance instead of running the embedded one.
 
+Requirements
+------------
+The module requires OpenMRS Core 2.9+ and Java 17.
+
 Configuration
 -------------
 The module can be configured via your `openmrs-runtime.properties` file. If no properties are provided, the module defaults to running an embedded broker on a random free TCP port with the web console enabled on port `8161`.
