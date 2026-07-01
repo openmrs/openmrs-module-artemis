@@ -76,7 +76,7 @@ public class MyEventListener {
 
 Building from Source
 --------------------
-You will need to have Java 1.8+ and Maven 2.x+ installed.  Use the command 'mvn package' to 
+You will need to have Java 17+ and Maven 2.x+ installed.  Use the command 'mvn package' to 
 compile and package the module.  The .omod file will be in the omod/target folder.
 
 Installation

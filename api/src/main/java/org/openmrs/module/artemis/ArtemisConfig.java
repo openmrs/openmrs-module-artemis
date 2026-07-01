@@ -42,7 +42,7 @@ public class ArtemisConfig {
 		
 		return new CachingConnectionFactory(amqFactory);
 	}
-
+	
 	@Bean("artemis.JmsTemplate")
 	public JmsTemplate jmsTemplate(@Qualifier("artemis.ConnectionFactory") CachingConnectionFactory connectionFactory) {
 		JmsTemplate jmsTemplate = new JmsTemplate(connectionFactory);
