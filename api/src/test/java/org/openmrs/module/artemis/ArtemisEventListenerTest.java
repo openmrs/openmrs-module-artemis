@@ -52,7 +52,7 @@ public class ArtemisEventListenerTest {
 	}
 	
 	private void injectMockConnectionFactory(ArtemisEventListener listener) throws Exception {
-		Field field = ArtemisEventListener.class.getDeclaredField("connectionFactory");
+		Field field = ArtemisEventListener.class.getDeclaredField("jmsConnectionFactory");
 		field.setAccessible(true);
 		field.set(listener, mock(CachingConnectionFactory.class));
 	}
