@@ -46,6 +46,17 @@ public class ArtemisEventListener {
 	
 	private static final Logger log = LoggerFactory.getLogger(ArtemisEventListener.class);
 
+	/**
+	 * Important: All {@link org.openmrs.event.broker.BrokerEventListener} instances listening to the same source
+	 * are invoked within a single transacted message delivery. If any listener throws an exception, the entire
+	 * transaction is rolled back, causing the message to be redelivered to all listeners. This means:
+	 * 
+	 * <ul>
+	 *   <li>Listeners must be idempotent—they may be called multiple times for the same message.</li>
+	 *   <li>A failure in one listener will re-run all listeners on that source.</li>
+	 *   <li>Use the JMS delivery count header (JMSXDeliveryCount) or a database-backed idempotency key if you need to detect retries.</li>
+	 * </ul>
+	 */
 	private final ObjectMapper objectMapper;
 	private final EventPublisher eventPublisher;
 	private final String defaultEventBroker;
