@@ -80,8 +80,8 @@
 			<dependency>
 				<groupId>com.github.ben-manes.caffeine</groupId>
 				<artifactId>caffeine</artifactId>
-				<!-- Use version 3.x for Java 11+ (we target Java 17) -->
-				<version>3.1.8</version>
+				<!-- Use version 2.9.3 if compiling for Java 8, or 3.x if on Java 11+ -->
+				<version>2.9.3</version>
 				<scope>test</scope>
 			</dependency>
 
