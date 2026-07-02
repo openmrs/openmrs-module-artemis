@@ -36,6 +36,8 @@ import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
+import org.openmrs.module.artemis.jaas.ProgrammaticJaasConfiguration;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -61,6 +63,8 @@ public class Artemis implements ApplicationContextAware {
 	
 	private volatile boolean shuttingDown = false;
 	
+	private volatile int consecutiveRestartFailures = 0;
+	
 	private ArtemisProperties artemisProperties;
 	
 	public Artemis(ArtemisProperties artemisProperties) {
@@ -84,22 +88,32 @@ public class Artemis implements ApplicationContextAware {
 		if (embeddedActiveMQ != null) {
 			return "vm://0"; //Use in-vm
 		} else {
-			return Context.getRuntimeProperties().getProperty(ARTEMIS_URI);
+			String brokerUri = Context.getRuntimeProperties().getProperty(ARTEMIS_URI);
+			if (brokerUri == null) {
+				throw new IllegalStateException(
+				        "Artemis: embedded broker is disabled but no external broker URI configured. "
+				                + "Set artemis.embedded.enabled=true or configure artemis.uri with your external broker URI (e.g., tcp://host:61616)");
+			}
+			return brokerUri;
 		}
 	}
 	
 	@PostConstruct
 	public void start() throws Exception {
 		if (artemisProperties.getEmbeddedEnabled()) {
+			// Clear shuttingDown flag in case this instance is restarted after stop()
+			shuttingDown = false;
 			try {
 				String username = artemisProperties.getUsername();
 				String password = artemisProperties.getPassword();
 				boolean hasCredentials = StringUtils.isNotBlank(username) && StringUtils.isNotBlank(password);
 				
-				ConfigurationImpl config = new ConfigurationImpl().addAcceptorConfiguration("in-vm", "vm://0")
-				        .addAcceptorConfiguration("tcp", "tcp://0.0.0.0:" + artemisProperties.getEmbeddedPort()) // assign the configured port (0 means random free port)
-				        .setSecurityEnabled(hasCredentials).setJMXManagementEnabled(true)
-				        .setMaxDiskUsage(100);
+				ConfigurationImpl config = new ConfigurationImpl()				        .addAcceptorConfiguration("in-vm", "vm://0");
+				        // Only add a TCP acceptor (exposed to the network) when credentials are configured
+				        if (hasCredentials) {
+				        config.addAcceptorConfiguration("tcp", "tcp://0.0.0.0:" + artemisProperties.getEmbeddedPort()); // assign the configured port (0 means random free port)
+				        }
+				        config.setSecurityEnabled(hasCredentials).setJMXManagementEnabled(true);
 				
 				String dataDir = OpenmrsUtil.getApplicationDataDirectory() + File.separator + "artemis";
 				config.setBindingsDirectory(dataDir + File.separator + "bindings");
@@ -165,44 +179,21 @@ public class Artemis implements ApplicationContextAware {
 						}
 						
 						if (hasCredentials) {
-							File etcDir = new File(dataDirFile, "etc");
-							if (!etcDir.exists()) {
-								etcDir.mkdirs();
-							}
-							
-							// Create JAAS Properties files dynamically based on configured credentials
-							File usersFile = new File(etcDir, "artemis-users.properties");
-							Files.write(usersFile.toPath(), (username + "=" + password + "\n").getBytes());
-							
-							File rolesFile = new File(etcDir, "artemis-roles.properties");
-							Files.write(rolesFile.toPath(), ("amq=" + username + "\n").getBytes());
-							
-							File loginConfig = new File(etcDir, "login.config");
-							
-							String jaasConfig = "activemq {\n" +
-							        "    org.apache.activemq.artemis.spi.core.security.jaas.PropertiesLoginModule required\n" +
-							        "        debug=false\n" +
-							        "        reload=true\n" +
-							        "        org.apache.activemq.jaas.properties.user=\"artemis-users.properties\"\n" +
-							        "        org.apache.activemq.jaas.properties.role=\"artemis-roles.properties\";\n" +
-							        "};\n";
-							Files.write(loginConfig.toPath(), jaasConfig.getBytes());
-							
-							System.setProperty("java.security.auth.login.config", loginConfig.getAbsolutePath());
-							
+							// Configure programmatic JAAS configuration that uses an in-memory login module
 							try {
-								// Force Java to reload JAAS configs now that we've set the property
-								javax.security.auth.login.Configuration.getConfiguration().refresh();
+								String realm = "activemq";
+								String roles = "amq";
+								ProgrammaticJaasConfiguration cfg = new ProgrammaticJaasConfiguration(realm, username, password, roles);
+								javax.security.auth.login.Configuration.setConfiguration(cfg);
+								System.setProperty("hawtio.authenticationEnabled", "true");
+								System.setProperty("hawtio.realm", realm);
+								System.setProperty("hawtio.role", "amq");
+								System.setProperty("hawtio.roles", "amq");
+								System.setProperty("hawtio.rolePrincipalClasses", "org.openmrs.module.artemis.jaas.RolePrincipal");
+								System.setProperty("hawtio.userPrincipalClasses", "org.openmrs.module.artemis.jaas.UserPrincipal");
 							} catch (Exception e) {
-								log.warn("Failed to refresh JAAS configuration. Artemis Web Console login might fail.", e);
+								log.warn("Failed to configure programmatic JAAS. Artemis Web Console login might fail.", e);
 							}
-							
-							System.setProperty("hawtio.authenticationEnabled", "true");
-							System.setProperty("hawtio.realm", "activemq");
-							System.setProperty("hawtio.role", "amq");
-							System.setProperty("hawtio.roles", "amq");
-							System.setProperty("hawtio.rolePrincipalClasses", "org.apache.activemq.artemis.spi.core.security.jaas.RolePrincipal");
-							System.setProperty("hawtio.userPrincipalClasses", "org.apache.activemq.artemis.spi.core.security.jaas.UserPrincipal");
 						} else {
 							// Bypass Hawtio's JAAS authentication requirement for embedded setups
 							System.setProperty("hawtio.authenticationEnabled", "false");
@@ -210,7 +201,8 @@ public class Artemis implements ApplicationContextAware {
 						System.setProperty("hawtio.offline", "true");
 						
 						WebServerDTO webServerDTO = new WebServerDTO();
-						webServerDTO.bind = "http://0.0.0.0:" + artemisProperties.getConsolePort();
+						// Bind the embedded console to the configured host (defaults to loopback) to avoid exposing it on all interfaces
+						webServerDTO.bind = "http://" + artemisProperties.getConsoleHost() + ":" + artemisProperties.getConsolePort();
 						webServerDTO.path = "console";
 						
 						AppDTO app = new AppDTO();
@@ -272,12 +264,25 @@ public class Artemis implements ApplicationContextAware {
                     } catch (Exception ignored) {
                     }
                     embeddedActiveMQ.start();
+                    consecutiveRestartFailures = 0; // Reset failure counter on successful restart
                     log.info("Successfully restarted Embedded Artemis server.");
                 } catch (Exception restartException) {
-                    log.error("CRITICAL: Failed to restart Embedded Artemis server. Terminating application...", restartException);
-                    if (applicationContext instanceof ConfigurableApplicationContext) {
-                        ((ConfigurableApplicationContext) applicationContext).close();
+                    consecutiveRestartFailures++;
+                    log.error("Failed to restart Embedded Artemis server (attempt {}). Manual intervention required.", 
+                              consecutiveRestartFailures, restartException);
+                    
+                    // After 3 consecutive failures, stop attempting automatic restarts
+                    if (consecutiveRestartFailures >= 3) {
+                        log.error("CRITICAL: Artemis broker has failed {} times and automatic restarts have been disabled. " +
+                                 "Manual intervention required to resolve the broker issue.", consecutiveRestartFailures);
+                        monitorExecutor.shutdownNow();
                     }
+                }
+            } else {
+                // Reset failure counter when broker is running
+                if (consecutiveRestartFailures > 0) {
+                    consecutiveRestartFailures = 0;
+                    log.info("Artemis broker health restored.");
                 }
             }
         }, 5, 5, TimeUnit.SECONDS);

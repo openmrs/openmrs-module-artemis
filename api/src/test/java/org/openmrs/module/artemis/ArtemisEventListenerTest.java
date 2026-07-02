@@ -10,6 +10,7 @@
 package org.openmrs.module.artemis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -51,7 +52,7 @@ public class ArtemisEventListenerTest {
 	}
 	
 	private void injectMockConnectionFactory(ArtemisEventListener listener) throws Exception {
-		Field field = ArtemisEventListener.class.getDeclaredField("connectionFactory");
+		Field field = ArtemisEventListener.class.getDeclaredField("jmsConnectionFactory");
 		field.setAccessible(true);
 		field.set(listener, mock(CachingConnectionFactory.class));
 	}
@@ -74,7 +75,8 @@ public class ArtemisEventListenerTest {
 		    Arrays.asList(explicitArtemisListener, implicitDefaultListener, otherBrokerListener, duplicateSourceListener));
 		
 		ArtemisEventListener eventListener = new ArtemisEventListener(objectMapper, eventPublisher, "artemis",
-		        listenerFactory, mock(CachingConnectionFactory.class), mock(JmsTemplate.class));
+		        listenerFactory, mock(CachingConnectionFactory.class), mock(ActiveMQConnectionFactory.class),
+		        mock(JmsTemplate.class));
 		
 		eventListener.setupListeners(mock(ContextRefreshedEvent.class));
 		
@@ -103,7 +105,8 @@ public class ArtemisEventListenerTest {
 		BrokerEventListenerFactory.Listener implicitDefaultListener = createMockListener("", "source1");
 		when(listenerFactory.getListeners()).thenReturn(Collections.singletonList(implicitDefaultListener));
 		ArtemisEventListener eventListener = new ArtemisEventListener(objectMapper, eventPublisher, "otherBroker",
-		        listenerFactory, mock(CachingConnectionFactory.class), mock(JmsTemplate.class));
+		        listenerFactory, mock(CachingConnectionFactory.class), mock(ActiveMQConnectionFactory.class),
+		        mock(JmsTemplate.class));
 		injectMockConnectionFactory(eventListener);
 		eventListener.setupListeners(mock(ContextRefreshedEvent.class));
 		List<DefaultMessageListenerContainer> containers = getListenerContainers(eventListener);

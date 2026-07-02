@@ -10,6 +10,7 @@
 package org.openmrs.module.artemis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.apache.activemq.artemis.jms.client.ActiveMQMessage;
 import org.apache.commons.lang.StringUtils;
 import org.openmrs.event.EventPayload;
@@ -46,12 +47,24 @@ public class ArtemisEventListener {
 	
 	private static final Logger log = LoggerFactory.getLogger(ArtemisEventListener.class);
 
+	/**
+	 * Important: All {@link org.openmrs.event.broker.BrokerEventListener} instances listening to the same source
+	 * are invoked within a single transacted message delivery. If any listener throws an exception, the entire
+	 * transaction is rolled back, causing the message to be redelivered to all listeners. This means:
+	 * 
+	 * <ul>
+	 *   <li>Listeners must be idempotent—they may be called multiple times for the same message.</li>
+	 *   <li>A failure in one listener will re-run all listeners on that source.</li>
+	 *   <li>Use the JMS delivery count header (JMSXDeliveryCount) or a database-backed idempotency key if you need to detect retries.</li>
+	 * </ul>
+	 */
 	private final ObjectMapper objectMapper;
 	private final EventPublisher eventPublisher;
 	private final String defaultEventBroker;
 	private final BrokerEventListenerFactory listenerFactory;
 
-	private final CachingConnectionFactory connectionFactory;
+	private final CachingConnectionFactory jmsConnectionFactory;
+	private final ActiveMQConnectionFactory listenerConnectionFactory;
 	private final JmsTemplate jmsTemplate;
 
 	private final List<DefaultMessageListenerContainer> listenerContainers = new ArrayList<>();
@@ -61,13 +74,15 @@ public class ArtemisEventListener {
 	public ArtemisEventListener(ObjectMapper objectMapper, EventPublisher eventPublisher,
 	                            @Value("${event.broker.default:artemis}") String defaultEventBroker,
 	                            BrokerEventListenerFactory listenerFactory,
-	                            @Qualifier("artemis.ConnectionFactory") CachingConnectionFactory connectionFactory,
+	                            @Qualifier("artemis.ConnectionFactory") CachingConnectionFactory jmsConnectionFactory,
+	                            @Qualifier("artemis.ListenerConnectionFactory") ActiveMQConnectionFactory listenerConnectionFactory,
 	                            @Qualifier("artemis.JmsTemplate") JmsTemplate jmsTemplate) {
 		this.objectMapper = objectMapper;
 		this.eventPublisher = eventPublisher;
 		this.defaultEventBroker = defaultEventBroker;
 		this.listenerFactory = listenerFactory;
-		this.connectionFactory = connectionFactory;
+		this.jmsConnectionFactory = jmsConnectionFactory;
+		this.listenerConnectionFactory = listenerConnectionFactory;
 		this.jmsTemplate = jmsTemplate;
 	}
 
@@ -90,7 +105,7 @@ public class ArtemisEventListener {
 			List<BrokerEventListenerFactory.Listener> listeners = entry.getValue();
 
 			DefaultMessageListenerContainer container = new DefaultMessageListenerContainer();
-			container.setConnectionFactory(this.connectionFactory);
+			container.setConnectionFactory(this.listenerConnectionFactory);
 			container.setDestinationName(source);
 			container.setSessionTransacted(true); // Ensures message is redelivered if an exception is thrown
 			
@@ -132,6 +147,9 @@ public class ArtemisEventListener {
 							if (String.class.isAssignableFrom(listener.getPayloadType())) {
 								payload = stringPayload;
 							} else {
+								// Deserialize via Jackson. Custom EventPayload implementations should ensure their
+								// serialized form is Jackson-compatible. Note: if custom deserialization is needed
+								// beyond Jackson's capabilities, consider implementing a custom deserializer.
 								payload = objectMapper.readValue(stringPayload, listener.getPayloadType());
 							}
 						}
@@ -178,10 +196,14 @@ public class ArtemisEventListener {
 					} else {
 						message = session.createTextMessage(objectMapper.writeValueAsString(event.getPayload()));
 					}
-					
+				
 					if (event.getHeaders() != null) {
 						for (Map.Entry<String, Object> entry : event.getHeaders().entrySet()) {
-							message.setObjectProperty(entry.getKey(), entry.getValue());
+							String headerName = entry.getKey();
+							// Filter reserved JMSX property names to avoid rejection on send
+							if (!headerName.startsWith("JMSX")) {
+								message.setObjectProperty(headerName, entry.getValue());
+							}
 						}
 					}
 					

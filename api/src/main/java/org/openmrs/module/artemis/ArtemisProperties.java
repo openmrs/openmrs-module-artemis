@@ -15,10 +15,10 @@ import org.springframework.stereotype.Component;
 @Component("artemis.ArtemisProperties")
 public class ArtemisProperties {
 	
-	@Value("${artemis.user:admin}")
+	@Value("${artemis.user:}")
 	private String username;
 	
-	@Value("${artemis.password:Admin123}")
+	@Value("${artemis.password:}")
 	private String password;
 	
 	@Value("${artemis.embedded.enabled:true}")
@@ -27,11 +27,14 @@ public class ArtemisProperties {
 	@Value("${artemis.embedded.port:0}")
 	private Integer embeddedPort;
 	
-	@Value("${artemis.embedded.console.enabled:true}")
+	@Value("${artemis.embedded.console.enabled:false}")
 	private Boolean consoleEnabled;
 	
 	@Value("${artemis.embedded.console.port:8161}")
 	private Integer consolePort;
+	
+	@Value("${artemis.embedded.console.host:127.0.0.1}")
+	private String consoleHost;
 	
 	public Boolean getEmbeddedEnabled() {
 		return embeddedEnabled;
@@ -71,6 +74,14 @@ public class ArtemisProperties {
 	
 	public void setConsolePort(Integer consolePort) {
 		this.consolePort = consolePort;
+	}
+	
+	public String getConsoleHost() {
+		return consoleHost;
+	}
+	
+	public void setConsoleHost(String consoleHost) {
+		this.consoleHost = consoleHost;
 	}
 	
 	public Integer getEmbeddedPort() {

@@ -20,8 +20,7 @@ import org.springframework.jms.core.JmsTemplate;
 @Configuration("artemis.ArtemisConfig")
 public class ArtemisConfig {
 	
-	@Bean("artemis.ConnectionFactory")
-	public CachingConnectionFactory connectionFactory(@Qualifier("artemis.Artemis") Artemis artemis) {
+	private static ActiveMQConnectionFactory createBaseFactory(@Qualifier("artemis.Artemis") Artemis artemis) {
 		String brokerUri = artemis.getBrokerUri();
 		if (brokerUri != null && !brokerUri.contains("reconnectAttempts")) {
 			brokerUri += (brokerUri.contains("?") ? "&" : "?") + "reconnectAttempts=3";
@@ -40,7 +39,17 @@ public class ArtemisConfig {
 			amqFactory.setPassword(artemis.getPassword());
 		}
 		
-		return new CachingConnectionFactory(amqFactory);
+		return amqFactory;
+	}
+	
+	@Bean("artemis.ConnectionFactory")
+	public CachingConnectionFactory connectionFactory(@Qualifier("artemis.Artemis") Artemis artemis) {
+		return new CachingConnectionFactory(createBaseFactory(artemis));
+	}
+	
+	@Bean("artemis.ListenerConnectionFactory")
+	public ActiveMQConnectionFactory listenerConnectionFactory(@Qualifier("artemis.Artemis") Artemis artemis) {
+		return createBaseFactory(artemis);
 	}
 	
 	@Bean("artemis.JmsTemplate")
