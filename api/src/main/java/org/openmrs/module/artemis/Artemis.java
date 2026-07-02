@@ -91,6 +91,8 @@ public class Artemis implements ApplicationContextAware {
 	@PostConstruct
 	public void start() throws Exception {
 		if (artemisProperties.getEmbeddedEnabled()) {
+			// Clear shuttingDown flag in case this instance is restarted after stop()
+			shuttingDown = false;
 			try {
 				String username = artemisProperties.getUsername();
 				String password = artemisProperties.getPassword();
