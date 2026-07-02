@@ -63,6 +63,8 @@ public class Artemis implements ApplicationContextAware {
 	
 	private volatile boolean shuttingDown = false;
 	
+	private volatile int consecutiveRestartFailures = 0;
+	
 	private ArtemisProperties artemisProperties;
 	
 	public Artemis(ArtemisProperties artemisProperties) {
@@ -262,12 +264,25 @@ public class Artemis implements ApplicationContextAware {
                     } catch (Exception ignored) {
                     }
                     embeddedActiveMQ.start();
+                    consecutiveRestartFailures = 0; // Reset failure counter on successful restart
                     log.info("Successfully restarted Embedded Artemis server.");
                 } catch (Exception restartException) {
-                    log.error("CRITICAL: Failed to restart Embedded Artemis server. Terminating application...", restartException);
-                    if (applicationContext instanceof ConfigurableApplicationContext) {
-                        ((ConfigurableApplicationContext) applicationContext).close();
+                    consecutiveRestartFailures++;
+                    log.error("Failed to restart Embedded Artemis server (attempt {}). Manual intervention required.", 
+                              consecutiveRestartFailures, restartException);
+                    
+                    // After 3 consecutive failures, stop attempting automatic restarts
+                    if (consecutiveRestartFailures >= 3) {
+                        log.error("CRITICAL: Artemis broker has failed {} times and automatic restarts have been disabled. " +
+                                 "Manual intervention required to resolve the broker issue.", consecutiveRestartFailures);
+                        monitorExecutor.shutdownNow();
                     }
+                }
+            } else {
+                // Reset failure counter when broker is running
+                if (consecutiveRestartFailures > 0) {
+                    consecutiveRestartFailures = 0;
+                    log.info("Artemis broker health restored.");
                 }
             }
         }, 5, 5, TimeUnit.SECONDS);

@@ -10,6 +10,7 @@
 package org.openmrs.module.artemis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.apache.activemq.artemis.jms.client.ActiveMQMessage;
 import org.apache.commons.lang.StringUtils;
 import org.openmrs.event.EventPayload;
@@ -62,7 +63,8 @@ public class ArtemisEventListener {
 	private final String defaultEventBroker;
 	private final BrokerEventListenerFactory listenerFactory;
 
-	private final CachingConnectionFactory connectionFactory;
+	private final CachingConnectionFactory jmsConnectionFactory;
+	private final ActiveMQConnectionFactory listenerConnectionFactory;
 	private final JmsTemplate jmsTemplate;
 
 	private final List<DefaultMessageListenerContainer> listenerContainers = new ArrayList<>();
@@ -72,13 +74,15 @@ public class ArtemisEventListener {
 	public ArtemisEventListener(ObjectMapper objectMapper, EventPublisher eventPublisher,
 	                            @Value("${event.broker.default:artemis}") String defaultEventBroker,
 	                            BrokerEventListenerFactory listenerFactory,
-	                            @Qualifier("artemis.ConnectionFactory") CachingConnectionFactory connectionFactory,
+	                            @Qualifier("artemis.ConnectionFactory") CachingConnectionFactory jmsConnectionFactory,
+	                            @Qualifier("artemis.ListenerConnectionFactory") ActiveMQConnectionFactory listenerConnectionFactory,
 	                            @Qualifier("artemis.JmsTemplate") JmsTemplate jmsTemplate) {
 		this.objectMapper = objectMapper;
 		this.eventPublisher = eventPublisher;
 		this.defaultEventBroker = defaultEventBroker;
 		this.listenerFactory = listenerFactory;
-		this.connectionFactory = connectionFactory;
+		this.jmsConnectionFactory = jmsConnectionFactory;
+		this.listenerConnectionFactory = listenerConnectionFactory;
 		this.jmsTemplate = jmsTemplate;
 	}
 
@@ -101,7 +105,7 @@ public class ArtemisEventListener {
 			List<BrokerEventListenerFactory.Listener> listeners = entry.getValue();
 
 			DefaultMessageListenerContainer container = new DefaultMessageListenerContainer();
-			container.setConnectionFactory(this.connectionFactory);
+			container.setConnectionFactory(this.listenerConnectionFactory);
 			container.setDestinationName(source);
 			container.setSessionTransacted(true); // Ensures message is redelivered if an exception is thrown
 			
@@ -143,6 +147,9 @@ public class ArtemisEventListener {
 							if (String.class.isAssignableFrom(listener.getPayloadType())) {
 								payload = stringPayload;
 							} else {
+								// Deserialize via Jackson. Custom EventPayload implementations should ensure their
+								// serialized form is Jackson-compatible. Note: if custom deserialization is needed
+								// beyond Jackson's capabilities, consider implementing a custom deserializer.
 								payload = objectMapper.readValue(stringPayload, listener.getPayloadType());
 							}
 						}
