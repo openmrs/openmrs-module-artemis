@@ -9,7 +9,7 @@ It seamlessly integrates with the OpenMRS Event Module, allowing you to publish 
 Features
 --------
 * **Embedded Broker**: Runs a lightweight, high-performance ActiveMQ Artemis broker directly within OpenMRS (zero-config by default).
-* **Web Console**: Includes an embedded Hawtio-based web console for monitoring queues, topics, and connections.
+* **Web Console**: Includes an embedded Hawtio-based web console for monitoring queues and connections.
 * **OpenMRS Event Integration**: Fully compatible with the OpenMRS Event framework (`BrokerOutgoingEvent`, `BrokerIncomingEvent`, and `@BrokerEventListener`).
 * **DLQ & Retry Mechanisms**: Auto-configured Dead Letter Queues (`.DLQ`) and exponential backoff for failed message deliveries.
 * **Health Watchdog**: Monitors the embedded broker in the background and automatically restarts it if it crashes unexpectedly.
@@ -20,22 +20,22 @@ Configuration
 -------------
 The module can be configured via your `openmrs-runtime.properties` file. If no properties are provided, the module defaults to running an embedded broker on a random free TCP port with the web console enabled on port `8161`.
 
-| Property | Default    | Description                                                                                                                                            |
-| :--- |:-----------|:-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `artemis.embedded.enabled` | `true`     | Set to `false` to disable the embedded broker (e.g., if you are connecting to an external broker).                                                     |
-| `artemis.embedded.port` | `0`        | The TCP port for the embedded broker. `0` automatically assigns a random free port.                                                                    |
-| `artemis.embedded.console.enabled` | `true`     | Set to `false` to disable the embedded web management console.                                                                                         |
-| `artemis.embedded.console.port` | `8161`     | The HTTP port for the web management console.                                                                                                          |
-| `artemis.embedded.console.host` | `127.0.0.1` | The host/address the console binds to. Defaults to loopback; set to 0.0.0.0 or a specific interface to expose remotely (not recommended). |
-| `artemis.user` | *(none)*    | Username for broker authentication and/or embedded console. If left empty, no network acceptor is opened and the embedded broker remains in-vm only.                                                         |
-| `artemis.password` | *(none)* | Password for broker authentication and/or embedded console. If left empty, no network acceptor is opened and the embedded broker remains in-vm only.                                                        |
-| `artemis.uri` | *(auto)*   | The URI used to connect to the broker. If using an external broker, set this to your broker's URI (e.g., `tcp://external-host:61616`).                 |
+| Property | Default     | Description                                                                                                                                          |
+| :--- |:------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| `artemis.embedded.enabled` | `true`      | Set to `false` to disable the embedded broker (e.g., if you are connecting to an external broker).                                                   |
+| `artemis.embedded.port` | `0`         | The TCP port for the embedded broker. `0` automatically assigns a random free port.                                                                  |
+| `artemis.embedded.console.enabled` | `false`     | Set to `true` to enable the embedded web management console.                                                                                         |
+| `artemis.embedded.console.port` | `8161`      | The HTTP port for the web management console.                                                                                                        |
+| `artemis.embedded.console.host` | `127.0.0.1` | The host/address the console binds to. Defaults to loopback; set to 0.0.0.0 or a specific interface to expose remotely (not recommended).            |
+| `artemis.user` | *(none)*    | Username for broker authentication and/or embedded console. If left empty, no network acceptor is opened and the embedded broker remains in-vm only. |
+| `artemis.password` | *(none)*    | Password for broker authentication and/or embedded console. If left empty, no network acceptor is opened and the embedded broker remains in-vm only. |
+| `artemis.uri` | *(auto)*    | The URI used to connect to the broker. If using an external broker, set this to your broker's URI (e.g., `tcp://external-host:61616`).               |
 
 Usage Examples
 --------------
 
 ### Publishing an Event
-You can publish messages to an Artemis queue or topic by creating a `BrokerOutgoingEvent` and sending it via the `EventPublisher`. Make sure to specify the `Artemis.BROKER_ID` as the target broker.
+You can publish messages to an Artemis queue by creating a `BrokerOutgoingEvent` and sending it via the `EventPublisher`. Make sure to specify the `Artemis.BROKER_ID` as the target broker.
 
 ```java
 import org.openmrs.event.EventPublisher;
@@ -51,14 +51,14 @@ public class MyService {
 
     public void notifySomethingHappened() {
         String payload = "Hello from OpenMRS!";
-        BrokerOutgoingEvent<String> event = new BrokerOutgoingEvent<>(payload, "my.custom.topic", Artemis.BROKER_ID);
+        BrokerOutgoingEvent<String> event = new BrokerOutgoingEvent<>(payload, "my.custom.queue", Artemis.BROKER_ID);
         eventPublisher.publishEvent(event);
     }
 }
 ```
 
 ### Listening to an Event
-To consume messages from an Artemis topic or queue, annotate a method in a Spring-managed bean with `@BrokerEventListener`.
+To consume messages from an Artemis queue, annotate a method in a Spring-managed bean with `@BrokerEventListener`.
 
 ```java
 import org.openmrs.event.broker.BrokerEventListener;
@@ -68,7 +68,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class MyEventListener {
 
-    @BrokerEventListener(value = "my.custom.topic", broker = Artemis.BROKER_ID)
+    @BrokerEventListener(value = "my.custom.queue", broker = Artemis.BROKER_ID)
     public void handleEvent(BrokerIncomingEvent<String> event) {
         System.out.println("Received message: " + event.getPayload());
     }
