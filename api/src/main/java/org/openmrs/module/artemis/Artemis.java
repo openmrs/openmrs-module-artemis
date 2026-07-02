@@ -86,7 +86,13 @@ public class Artemis implements ApplicationContextAware {
 		if (embeddedActiveMQ != null) {
 			return "vm://0"; //Use in-vm
 		} else {
-			return Context.getRuntimeProperties().getProperty(ARTEMIS_URI);
+			String brokerUri = Context.getRuntimeProperties().getProperty(ARTEMIS_URI);
+			if (brokerUri == null) {
+				throw new IllegalStateException(
+				        "Artemis: embedded broker is disabled but no external broker URI configured. "
+				                + "Set artemis.embedded.enabled=true or configure artemis.uri with your external broker URI (e.g., tcp://host:61616)");
+			}
+			return brokerUri;
 		}
 	}
 	

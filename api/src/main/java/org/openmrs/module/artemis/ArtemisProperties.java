@@ -27,7 +27,7 @@ public class ArtemisProperties {
 	@Value("${artemis.embedded.port:0}")
 	private Integer embeddedPort;
 	
-	@Value("${artemis.embedded.console.enabled:true}")
+	@Value("${artemis.embedded.console.enabled:false}")
 	private Boolean consoleEnabled;
 	
 	@Value("${artemis.embedded.console.port:8161}")

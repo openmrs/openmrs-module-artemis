@@ -189,10 +189,14 @@ public class ArtemisEventListener {
 					} else {
 						message = session.createTextMessage(objectMapper.writeValueAsString(event.getPayload()));
 					}
-					
+				
 					if (event.getHeaders() != null) {
 						for (Map.Entry<String, Object> entry : event.getHeaders().entrySet()) {
-							message.setObjectProperty(entry.getKey(), entry.getValue());
+							String headerName = entry.getKey();
+							// Filter reserved JMSX property names to avoid rejection on send
+							if (!headerName.startsWith("JMSX")) {
+								message.setObjectProperty(headerName, entry.getValue());
+							}
 						}
 					}
 					
