@@ -36,6 +36,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -100,8 +101,7 @@ public class Artemis implements ApplicationContextAware {
 				
 				ConfigurationImpl config = new ConfigurationImpl().addAcceptorConfiguration("in-vm", "vm://0")
 				        .addAcceptorConfiguration("tcp", "tcp://0.0.0.0:" + artemisProperties.getEmbeddedPort()) // assign the configured port (0 means random free port)
-				        .setSecurityEnabled(hasCredentials).setJMXManagementEnabled(true)
-				        .setMaxDiskUsage(100);
+				        .setSecurityEnabled(hasCredentials).setJMXManagementEnabled(true);
 				
 				String dataDir = OpenmrsUtil.getApplicationDataDirectory() + File.separator + "artemis";
 				config.setBindingsDirectory(dataDir + File.separator + "bindings");
@@ -174,10 +174,10 @@ public class Artemis implements ApplicationContextAware {
 							
 							// Create JAAS Properties files dynamically based on configured credentials
 							File usersFile = new File(etcDir, "artemis-users.properties");
-							Files.write(usersFile.toPath(), (username + "=" + password + "\n").getBytes());
+							Files.write(usersFile.toPath(), (username + "=" + password + "\n").getBytes(StandardCharsets.UTF_8));
 							
 							File rolesFile = new File(etcDir, "artemis-roles.properties");
-							Files.write(rolesFile.toPath(), ("amq=" + username + "\n").getBytes());
+							Files.write(rolesFile.toPath(), ("amq=" + username + "\n").getBytes(StandardCharsets.UTF_8));
 							
 							File loginConfig = new File(etcDir, "login.config");
 							
@@ -188,7 +188,7 @@ public class Artemis implements ApplicationContextAware {
 							        "        org.apache.activemq.jaas.properties.user=\"artemis-users.properties\"\n" +
 							        "        org.apache.activemq.jaas.properties.role=\"artemis-roles.properties\";\n" +
 							        "};\n";
-							Files.write(loginConfig.toPath(), jaasConfig.getBytes());
+							Files.write(loginConfig.toPath(), jaasConfig.getBytes(StandardCharsets.UTF_8));
 							
 							System.setProperty("java.security.auth.login.config", loginConfig.getAbsolutePath());
 							
