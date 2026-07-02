@@ -33,6 +33,9 @@ public class ArtemisProperties {
 	@Value("${artemis.embedded.console.port:8161}")
 	private Integer consolePort;
 	
+	@Value("${artemis.embedded.console.host:127.0.0.1}")
+	private String consoleHost;
+	
 	public Boolean getEmbeddedEnabled() {
 		return embeddedEnabled;
 	}
@@ -71,6 +74,14 @@ public class ArtemisProperties {
 	
 	public void setConsolePort(Integer consolePort) {
 		this.consolePort = consolePort;
+	}
+	
+	public String getConsoleHost() {
+		return consoleHost;
+	}
+	
+	public void setConsoleHost(String consoleHost) {
+		this.consoleHost = consoleHost;
 	}
 	
 	public Integer getEmbeddedPort() {

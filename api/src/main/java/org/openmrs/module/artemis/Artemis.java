@@ -215,8 +215,8 @@ public class Artemis implements ApplicationContextAware {
 						System.setProperty("hawtio.offline", "true");
 						
 						WebServerDTO webServerDTO = new WebServerDTO();
-						// Bind the embedded console to loopback by default to avoid exposing it on all interfaces
-						webServerDTO.bind = "http://127.0.0.1:" + artemisProperties.getConsolePort();
+						// Bind the embedded console to the configured host (defaults to loopback) to avoid exposing it on all interfaces
+						webServerDTO.bind = "http://" + artemisProperties.getConsoleHost() + ":" + artemisProperties.getConsolePort();
 						webServerDTO.path = "console";
 						
 						AppDTO app = new AppDTO();
