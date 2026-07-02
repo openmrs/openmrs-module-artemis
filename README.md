@@ -26,8 +26,8 @@ The module can be configured via your `openmrs-runtime.properties` file. If no p
 | `artemis.embedded.port` | `0`        | The TCP port for the embedded broker. `0` automatically assigns a random free port.                                                                    |
 | `artemis.embedded.console.enabled` | `true`     | Set to `false` to disable the embedded web management console.                                                                                         |
 | `artemis.embedded.console.port` | `8161`     | The HTTP port for the web management console.                                                                                                          |
-| `artemis.user` | 'admin'    | Username for broker authentication and/or embedded console (disabled authentication if empty).                                                         |
-| `artemis.password` | 'Admin123' | Password for broker authentication and/or embedded console (disabled authentication if empty).                                                        |
+| `artemis.user` | *(none)*    | Username for broker authentication and/or embedded console. If left empty, no network acceptor is opened and the embedded broker remains in-vm only.                                                         |
+| `artemis.password` | *(none)* | Password for broker authentication and/or embedded console. If left empty, no network acceptor is opened and the embedded broker remains in-vm only.                                                        |
 | `artemis.uri` | *(auto)*   | The URI used to connect to the broker. If using an external broker, set this to your broker's URI (e.g., `tcp://external-host:61616`).                 |
 
 Usage Examples

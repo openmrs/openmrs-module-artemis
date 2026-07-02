@@ -15,10 +15,10 @@ import org.springframework.stereotype.Component;
 @Component("artemis.ArtemisProperties")
 public class ArtemisProperties {
 	
-	@Value("${artemis.user:admin}")
+	@Value("${artemis.user:}")
 	private String username;
 	
-	@Value("${artemis.password:Admin123}")
+	@Value("${artemis.password:}")
 	private String password;
 	
 	@Value("${artemis.embedded.enabled:true}")

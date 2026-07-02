@@ -99,9 +99,12 @@ public class Artemis implements ApplicationContextAware {
 				String password = artemisProperties.getPassword();
 				boolean hasCredentials = StringUtils.isNotBlank(username) && StringUtils.isNotBlank(password);
 				
-				ConfigurationImpl config = new ConfigurationImpl().addAcceptorConfiguration("in-vm", "vm://0")
-				        .addAcceptorConfiguration("tcp", "tcp://0.0.0.0:" + artemisProperties.getEmbeddedPort()) // assign the configured port (0 means random free port)
-				        .setSecurityEnabled(hasCredentials).setJMXManagementEnabled(true);
+				ConfigurationImpl config = new ConfigurationImpl()				        .addAcceptorConfiguration("in-vm", "vm://0");
+				        // Only add a TCP acceptor (exposed to the network) when credentials are configured
+				        if (hasCredentials) {
+				        config.addAcceptorConfiguration("tcp", "tcp://0.0.0.0:" + artemisProperties.getEmbeddedPort()); // assign the configured port (0 means random free port)
+				        }
+				        config.setSecurityEnabled(hasCredentials).setJMXManagementEnabled(true);
 				
 				String dataDir = OpenmrsUtil.getApplicationDataDirectory() + File.separator + "artemis";
 				config.setBindingsDirectory(dataDir + File.separator + "bindings");
