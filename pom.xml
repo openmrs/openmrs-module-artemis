@@ -18,9 +18,9 @@
 	<url>https://wiki.openmrs.org/x/FQ4z</url>
 
 	<scm>
-		<connection>scm:git:git@github.com:openmrs/openmrs-module-debezium.git</connection>
-		<developerConnection>scm:git:git@github.com:openmrs/openmrs-module-debezium.git</developerConnection>
-		<url>https://github.com/openmrs/openmrs-module-debezium/</url>
+		<connection>scm:git:git@github.com:openmrs/openmrs-module-artemis.git</connection>
+		<developerConnection>scm:git:git@github.com:openmrs/openmrs-module-artemis.git</developerConnection>
+		<url>https://github.com/openmrs/openmrs-module-artemis/</url>
 	</scm>
 
 	<properties>
