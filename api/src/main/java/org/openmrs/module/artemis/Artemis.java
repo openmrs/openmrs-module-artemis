@@ -37,6 +37,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.nio.charset.StandardCharsets;
+import org.openmrs.module.artemis.jaas.ProgrammaticJaasConfiguration;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -170,44 +171,21 @@ public class Artemis implements ApplicationContextAware {
 						}
 						
 						if (hasCredentials) {
-							File etcDir = new File(dataDirFile, "etc");
-							if (!etcDir.exists()) {
-								etcDir.mkdirs();
-							}
-							
-							// Create JAAS Properties files dynamically based on configured credentials
-							File usersFile = new File(etcDir, "artemis-users.properties");
-							Files.write(usersFile.toPath(), (username + "=" + password + "\n").getBytes(StandardCharsets.UTF_8));
-							
-							File rolesFile = new File(etcDir, "artemis-roles.properties");
-							Files.write(rolesFile.toPath(), ("amq=" + username + "\n").getBytes(StandardCharsets.UTF_8));
-							
-							File loginConfig = new File(etcDir, "login.config");
-							
-							String jaasConfig = "activemq {\n" +
-							        "    org.apache.activemq.artemis.spi.core.security.jaas.PropertiesLoginModule required\n" +
-							        "        debug=false\n" +
-							        "        reload=true\n" +
-							        "        org.apache.activemq.jaas.properties.user=\"artemis-users.properties\"\n" +
-							        "        org.apache.activemq.jaas.properties.role=\"artemis-roles.properties\";\n" +
-							        "};\n";
-							Files.write(loginConfig.toPath(), jaasConfig.getBytes(StandardCharsets.UTF_8));
-							
-							System.setProperty("java.security.auth.login.config", loginConfig.getAbsolutePath());
-							
+							// Configure programmatic JAAS configuration that uses an in-memory login module
 							try {
-								// Force Java to reload JAAS configs now that we've set the property
-								javax.security.auth.login.Configuration.getConfiguration().refresh();
+								String realm = "activemq";
+								String roles = "amq";
+								ProgrammaticJaasConfiguration cfg = new ProgrammaticJaasConfiguration(realm, username, password, roles);
+								javax.security.auth.login.Configuration.setConfiguration(cfg);
+								System.setProperty("hawtio.authenticationEnabled", "true");
+								System.setProperty("hawtio.realm", realm);
+								System.setProperty("hawtio.role", "amq");
+								System.setProperty("hawtio.roles", "amq");
+								System.setProperty("hawtio.rolePrincipalClasses", "org.openmrs.module.artemis.jaas.RolePrincipal");
+								System.setProperty("hawtio.userPrincipalClasses", "org.openmrs.module.artemis.jaas.UserPrincipal");
 							} catch (Exception e) {
-								log.warn("Failed to refresh JAAS configuration. Artemis Web Console login might fail.", e);
+								log.warn("Failed to configure programmatic JAAS. Artemis Web Console login might fail.", e);
 							}
-							
-							System.setProperty("hawtio.authenticationEnabled", "true");
-							System.setProperty("hawtio.realm", "activemq");
-							System.setProperty("hawtio.role", "amq");
-							System.setProperty("hawtio.roles", "amq");
-							System.setProperty("hawtio.rolePrincipalClasses", "org.apache.activemq.artemis.spi.core.security.jaas.RolePrincipal");
-							System.setProperty("hawtio.userPrincipalClasses", "org.apache.activemq.artemis.spi.core.security.jaas.UserPrincipal");
 						} else {
 							// Bypass Hawtio's JAAS authentication requirement for embedded setups
 							System.setProperty("hawtio.authenticationEnabled", "false");
