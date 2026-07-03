@@ -12,11 +12,9 @@ package org.openmrs.module.artemis;
 import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.openmrs.api.context.Context;
 import org.openmrs.test.jupiter.BaseContextMockTest;
-import org.springframework.context.ConfigurableApplicationContext;
 
 import javax.security.auth.login.AppConfigurationEntry;
 import javax.security.auth.login.Configuration;
@@ -34,9 +32,6 @@ import static org.junit.Assert.fail;
 
 @RunWith(MockitoJUnitRunner.class)
 public class ArtemisTest extends BaseContextMockTest {
-	
-	@Mock
-	private ConfigurableApplicationContext applicationContext;
 	
 	private ArtemisProperties createProperties(boolean embeddedEnabled) {
 		ArtemisProperties props = new ArtemisProperties();
@@ -111,7 +106,7 @@ public class ArtemisTest extends BaseContextMockTest {
 		props.setEmbeddedPort(0);
 
 		Artemis artemis = new Artemis(props);
-		artemis.setApplicationContext(applicationContext);
+
 		try {
 			artemis.start();
 			Field f = Artemis.class.getDeclaredField("embeddedActiveMQ");
@@ -134,7 +129,7 @@ public class ArtemisTest extends BaseContextMockTest {
 		System.setProperty("OPENMRS_APPLICATION_DATA_DIRECTORY", tempDir.toAbsolutePath().toString());
 		
 		Artemis artemis = new Artemis(createProperties(true));
-		artemis.setApplicationContext(applicationContext);
+		
 		try {
 			artemis.start();
 			assertEquals("vm://0", artemis.getBrokerUri());

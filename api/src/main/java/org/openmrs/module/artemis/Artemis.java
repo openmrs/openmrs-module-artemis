@@ -144,8 +144,8 @@ public class Artemis {
 				addressSettings.setMaxRedeliveryDelay(30000); // Cap the maximum delay at 30 seconds
 				config.addAddressSetting("#", addressSettings);
 
-				// Parse any properties from runtime properties with artemis. prefix.
-				config.parsePrefixedProperties(Context.getRuntimeProperties(), "artemis.");
+				// Parse broker-level config from runtime properties with artemis.broker. prefix.
+				config.parsePrefixedProperties(Context.getRuntimeProperties(), "artemis.broker.");
 				
 				embeddedActiveMQ = new EmbeddedActiveMQ();
 				embeddedActiveMQ.setConfiguration(config);
