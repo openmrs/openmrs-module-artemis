@@ -61,8 +61,12 @@ public class InMemoryLoginModule implements LoginModule {
         String expectedUser = eu != null ? eu.toString() : "";
         String expectedPass = ep != null ? ep.toString() : "";
 
-        if (expectedUser.isEmpty() || expectedPass == null) {
+        if (expectedUser.isEmpty() || expectedPass.isEmpty()) {
             throw new FailedLoginException("No configured credentials");
+        }
+
+        if (providedPass == null) {
+            throw new FailedLoginException("Invalid username or password");
         }
 
         if (expectedUser.equals(providedUser) && expectedPass.equals(new String(providedPass))) {

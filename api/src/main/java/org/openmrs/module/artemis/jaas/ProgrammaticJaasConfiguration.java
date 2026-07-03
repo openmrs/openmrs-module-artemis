@@ -24,17 +24,31 @@ public class ProgrammaticJaasConfiguration extends Configuration {
 	
 	private final String realmName;
 	
+	private final Configuration previousConfiguration;
+	
 	public ProgrammaticJaasConfiguration(String realmName, String username, String password, String roles) {
 		this.realmName = realmName;
 		this.username = username;
 		this.password = password;
 		this.roles = roles != null ? roles : "amq";
+		// Capture the existing config so unknown realm names keep working (e.g. Tomcat realms, Kerberos).
+		// Guard against JDK configurations that throw when no config exists yet.
+		Configuration prev = null;
+		try {
+			prev = Configuration.getConfiguration();
+		}
+		catch (Exception ignored) {}
+		this.previousConfiguration = prev;
+	}
+	
+	public Configuration getPreviousConfiguration() {
+		return previousConfiguration;
 	}
 	
 	@Override
     public AppConfigurationEntry[] getAppConfigurationEntry(String name) {
         if (!realmName.equals(name)) {
-            return null;
+            return previousConfiguration != null ? previousConfiguration.getAppConfigurationEntry(name) : null;
         }
 
         Map<String, String> options = new HashMap<>();
