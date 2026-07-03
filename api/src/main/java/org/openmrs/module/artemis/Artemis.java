@@ -27,17 +27,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
-import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.File;
 import java.io.InputStream;
+import org.openmrs.module.artemis.jaas.ProgrammaticJaasConfiguration;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.nio.charset.StandardCharsets;
-import org.openmrs.module.artemis.jaas.ProgrammaticJaasConfiguration;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -48,6 +46,26 @@ import java.util.concurrent.TimeUnit;
 public class Artemis implements ApplicationContextAware {
 	
 	private static final Logger log = LoggerFactory.getLogger(Artemis.class);
+	
+	static final String HAWTIO_AUTHENTICATION_ENABLED = "hawtio.authenticationEnabled";
+	
+	static final String HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES = "hawtio.authenticationContainerDiscoveryClasses";
+	
+	static final String HAWTIO_OFFLINE = "hawtio.offline";
+	
+	static final String HAWTIO_REALM = "hawtio.realm";
+	
+	static final String HAWTIO_ROLE = "hawtio.role";
+	
+	static final String HAWTIO_ROLES = "hawtio.roles";
+	
+	static final String HAWTIO_ROLE_PRINCIPAL_CLASSES = "hawtio.rolePrincipalClasses";
+	
+	static final String HAWTIO_USER_PRINCIPAL_CLASSES = "hawtio.userPrincipalClasses";
+	
+	static final String HAWTIO_REALM_NAME = "activemq";
+	
+	static final String HAWTIO_EMBEDDED_ROLE = "amq";
 	
 	public static final String BROKER_ID = "artemis";
 	
@@ -108,12 +126,12 @@ public class Artemis implements ApplicationContextAware {
 				String password = artemisProperties.getPassword();
 				boolean hasCredentials = StringUtils.isNotBlank(username) && StringUtils.isNotBlank(password);
 				
-				ConfigurationImpl config = new ConfigurationImpl()				        .addAcceptorConfiguration("in-vm", "vm://0");
-				        // Only add a TCP acceptor (exposed to the network) when credentials are configured
-				        if (hasCredentials) {
-				        config.addAcceptorConfiguration("tcp", "tcp://0.0.0.0:" + artemisProperties.getEmbeddedPort()); // assign the configured port (0 means random free port)
-				        }
-				        config.setSecurityEnabled(hasCredentials).setJMXManagementEnabled(true);
+				ConfigurationImpl config = new ConfigurationImpl().addAcceptorConfiguration("in-vm", "vm://0");
+				// Only add a TCP acceptor (exposed to the network) when credentials are configured
+				if (hasCredentials) {
+					config.addAcceptorConfiguration("tcp", "tcp://0.0.0.0:" + artemisProperties.getEmbeddedPort()); // assign the configured port (0 means random free port)
+				}
+				config.setSecurityEnabled(hasCredentials).setJMXManagementEnabled(true);
 				
 				String dataDir = OpenmrsUtil.getApplicationDataDirectory() + File.separator + "artemis";
 				config.setBindingsDirectory(dataDir + File.separator + "bindings");
@@ -178,27 +196,7 @@ public class Artemis implements ApplicationContextAware {
 							}
 						}
 						
-						if (hasCredentials) {
-							// Configure programmatic JAAS configuration that uses an in-memory login module
-							try {
-								String realm = "activemq";
-								String roles = "amq";
-								ProgrammaticJaasConfiguration cfg = new ProgrammaticJaasConfiguration(realm, username, password, roles);
-								javax.security.auth.login.Configuration.setConfiguration(cfg);
-								System.setProperty("hawtio.authenticationEnabled", "true");
-								System.setProperty("hawtio.realm", realm);
-								System.setProperty("hawtio.role", "amq");
-								System.setProperty("hawtio.roles", "amq");
-								System.setProperty("hawtio.rolePrincipalClasses", "org.openmrs.module.artemis.jaas.RolePrincipal");
-								System.setProperty("hawtio.userPrincipalClasses", "org.openmrs.module.artemis.jaas.UserPrincipal");
-							} catch (Exception e) {
-								log.warn("Failed to configure programmatic JAAS. Artemis Web Console login might fail.", e);
-							}
-						} else {
-							// Bypass Hawtio's JAAS authentication requirement for embedded setups
-							System.setProperty("hawtio.authenticationEnabled", "false");
-						}
-						System.setProperty("hawtio.offline", "true");
+						configureHawtioAuthentication(username, password, hasCredentials);
 						
 						WebServerDTO webServerDTO = new WebServerDTO();
 						// Bind the embedded console to the configured host (defaults to loopback) to avoid exposing it on all interfaces
@@ -232,6 +230,45 @@ public class Artemis implements ApplicationContextAware {
 				throw new RuntimeException("CRITICAL: Failed to start Embedded Artemis server", e);
 			}
 		}
+	}
+	
+	void configureHawtioAuthentication(String username, String password, boolean hasCredentials) {
+		clearHawtioAuthenticationProperties();
+		
+		if (hasCredentials) {
+			// Hawtio 4.7 auto-discovers Tomcat auth providers unless discovery is disabled explicitly.
+			// Our embedded console runs on Jetty with a programmatic JAAS realm instead.
+			try {
+				ProgrammaticJaasConfiguration cfg = new ProgrammaticJaasConfiguration(HAWTIO_REALM_NAME, username, password,
+				        HAWTIO_EMBEDDED_ROLE);
+				javax.security.auth.login.Configuration.setConfiguration(cfg);
+				System.setProperty(HAWTIO_AUTHENTICATION_ENABLED, "true");
+				System.setProperty(HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES, "");
+				System.setProperty(HAWTIO_REALM, HAWTIO_REALM_NAME);
+				System.setProperty(HAWTIO_ROLE, HAWTIO_EMBEDDED_ROLE);
+				System.setProperty(HAWTIO_ROLES, HAWTIO_EMBEDDED_ROLE);
+				System.setProperty(HAWTIO_ROLE_PRINCIPAL_CLASSES, "org.openmrs.module.artemis.jaas.RolePrincipal");
+				System.setProperty(HAWTIO_USER_PRINCIPAL_CLASSES, "org.openmrs.module.artemis.jaas.UserPrincipal");
+			}
+			catch (Exception e) {
+				log.warn("Failed to configure programmatic JAAS. Artemis Web Console login might fail.", e);
+			}
+		} else {
+			// Bypass Hawtio's JAAS authentication requirement for embedded setups
+			System.setProperty(HAWTIO_AUTHENTICATION_ENABLED, "false");
+		}
+		
+		System.setProperty(HAWTIO_OFFLINE, "true");
+	}
+	
+	private void clearHawtioAuthenticationProperties() {
+		System.clearProperty(HAWTIO_AUTHENTICATION_ENABLED);
+		System.clearProperty(HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES);
+		System.clearProperty(HAWTIO_REALM);
+		System.clearProperty(HAWTIO_ROLE);
+		System.clearProperty(HAWTIO_ROLES);
+		System.clearProperty(HAWTIO_ROLE_PRINCIPAL_CLASSES);
+		System.clearProperty(HAWTIO_USER_PRINCIPAL_CLASSES);
 	}
 	
 	private void startHealthMonitor() {

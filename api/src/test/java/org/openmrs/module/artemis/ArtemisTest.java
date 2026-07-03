@@ -11,25 +11,22 @@ package org.openmrs.module.artemis;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
-import org.openmrs.GlobalProperty;
-import org.openmrs.api.AdministrationService;
 import org.openmrs.api.context.Context;
-import org.openmrs.api.db.ContextDAO;
 import org.openmrs.test.jupiter.BaseContextMockTest;
 import org.springframework.context.ConfigurableApplicationContext;
 
+import javax.security.auth.login.AppConfigurationEntry;
+import javax.security.auth.login.Configuration;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
 public class ArtemisTest extends BaseContextMockTest {
@@ -93,6 +90,95 @@ public class ArtemisTest extends BaseContextMockTest {
 		finally {
 			artemis.stop();
 			System.clearProperty("OPENMRS_APPLICATION_DATA_DIRECTORY");
+		}
+	}
+	
+	@Test
+	public void configureHawtioAuthentication_shouldDisableContainerDiscoveryWhenCredentialsConfigured() {
+		Artemis artemis = new Artemis(createProperties(false));
+		Configuration originalConfiguration = Configuration.getConfiguration();
+		Properties originalProperties = snapshotHawtioProperties();
+		
+		try {
+			artemis.configureHawtioAuthentication("testUser", "testPass", true);
+			
+			assertEquals("true", System.getProperty(Artemis.HAWTIO_AUTHENTICATION_ENABLED));
+			assertEquals("", System.getProperty(Artemis.HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES));
+			assertEquals("true", System.getProperty(Artemis.HAWTIO_OFFLINE));
+			assertEquals(Artemis.HAWTIO_REALM_NAME, System.getProperty(Artemis.HAWTIO_REALM));
+			assertEquals(Artemis.HAWTIO_EMBEDDED_ROLE, System.getProperty(Artemis.HAWTIO_ROLES));
+			AppConfigurationEntry[] entries = Configuration.getConfiguration().getAppConfigurationEntry(
+			    Artemis.HAWTIO_REALM_NAME);
+			assertNotNull(entries);
+			assertEquals(1, entries.length);
+		}
+		finally {
+			Configuration.setConfiguration(originalConfiguration);
+			restoreHawtioProperties(originalProperties);
+		}
+	}
+	
+	@Test
+	public void configureHawtioAuthentication_shouldDisableAuthAndClearJaasPropertiesWithoutCredentials() {
+		Artemis artemis = new Artemis(createProperties(false));
+		Configuration originalConfiguration = Configuration.getConfiguration();
+		Properties originalProperties = snapshotHawtioProperties();
+		
+		try {
+			System.setProperty(Artemis.HAWTIO_REALM, "staleRealm");
+			System.setProperty(Artemis.HAWTIO_ROLES, "staleRole");
+			System.setProperty(Artemis.HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES, "staleDiscovery");
+			
+			artemis.configureHawtioAuthentication("", "", false);
+			
+			assertEquals("false", System.getProperty(Artemis.HAWTIO_AUTHENTICATION_ENABLED));
+			assertEquals("true", System.getProperty(Artemis.HAWTIO_OFFLINE));
+			assertNull(System.getProperty(Artemis.HAWTIO_REALM));
+			assertNull(System.getProperty(Artemis.HAWTIO_ROLES));
+			assertNull(System.getProperty(Artemis.HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES));
+		}
+		finally {
+			Configuration.setConfiguration(originalConfiguration);
+			restoreHawtioProperties(originalProperties);
+		}
+	}
+	
+	private Properties snapshotHawtioProperties() {
+		Properties properties = new Properties();
+		copyProperty(properties, Artemis.HAWTIO_AUTHENTICATION_ENABLED);
+		copyProperty(properties, Artemis.HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES);
+		copyProperty(properties, Artemis.HAWTIO_OFFLINE);
+		copyProperty(properties, Artemis.HAWTIO_REALM);
+		copyProperty(properties, Artemis.HAWTIO_ROLE);
+		copyProperty(properties, Artemis.HAWTIO_ROLES);
+		copyProperty(properties, Artemis.HAWTIO_ROLE_PRINCIPAL_CLASSES);
+		copyProperty(properties, Artemis.HAWTIO_USER_PRINCIPAL_CLASSES);
+		return properties;
+	}
+	
+	private void restoreHawtioProperties(Properties properties) {
+		restoreProperty(properties, Artemis.HAWTIO_AUTHENTICATION_ENABLED);
+		restoreProperty(properties, Artemis.HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES);
+		restoreProperty(properties, Artemis.HAWTIO_OFFLINE);
+		restoreProperty(properties, Artemis.HAWTIO_REALM);
+		restoreProperty(properties, Artemis.HAWTIO_ROLE);
+		restoreProperty(properties, Artemis.HAWTIO_ROLES);
+		restoreProperty(properties, Artemis.HAWTIO_ROLE_PRINCIPAL_CLASSES);
+		restoreProperty(properties, Artemis.HAWTIO_USER_PRINCIPAL_CLASSES);
+	}
+	
+	private void copyProperty(Properties target, String name) {
+		String value = System.getProperty(name);
+		if (value != null) {
+			target.setProperty(name, value);
+		}
+	}
+	
+	private void restoreProperty(Properties source, String name) {
+		if (source.containsKey(name)) {
+			System.setProperty(name, source.getProperty(name));
+		} else {
+			System.clearProperty(name);
 		}
 	}
 }
