@@ -206,8 +206,17 @@ public class Artemis {
 						
 						webServer = new WebServerComponent();
 						// We use your dataDir as the home/instance dir where Artemis will look for the WAR file
-						webServer.configure(webServerDTO, dataDir, dataDir); 
-						webServer.start();
+						webServer.configure(webServerDTO, dataDir, dataDir);
+						// Use the Artemis module classloader as context classloader so Jetty's webapp
+						// classloader inherits only jakarta.servlet classes, not any javax.servlet-based
+						// Hawtio version that another module (e.g. openmrs-module-camel) may have loaded.
+						ClassLoader savedClassLoader = Thread.currentThread().getContextClassLoader();
+						try {
+							Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
+							webServer.start();
+						} finally {
+							Thread.currentThread().setContextClassLoader(savedClassLoader);
+						}
 						log.info("Embedded Artemis Web Console started on http://localhost:{}/console", artemisProperties.getConsolePort());
 					} catch (Exception e) {
 						log.warn("Failed to start Artemis Web Console. Ensure artemis-web dependency and console.war are available.", e);
