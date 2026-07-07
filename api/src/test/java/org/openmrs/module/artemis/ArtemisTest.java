@@ -9,16 +9,16 @@
  */
 package org.openmrs.module.artemis;
 
+import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.openmrs.api.context.Context;
 import org.openmrs.test.jupiter.BaseContextMockTest;
-import org.springframework.context.ConfigurableApplicationContext;
 
 import javax.security.auth.login.AppConfigurationEntry;
 import javax.security.auth.login.Configuration;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
@@ -27,12 +27,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 @RunWith(MockitoJUnitRunner.class)
 public class ArtemisTest extends BaseContextMockTest {
-	
-	@Mock
-	private ConfigurableApplicationContext applicationContext;
 	
 	private ArtemisProperties createProperties(boolean embeddedEnabled) {
 		ArtemisProperties props = new ArtemisProperties();
@@ -77,12 +75,60 @@ public class ArtemisTest extends BaseContextMockTest {
 	}
 	
 	@Test
+	public void getBrokerUri_shouldThrowWhenEmbeddedDisabledAndNoUriConfigured() {
+		Artemis artemis = new Artemis(createProperties(false));
+		
+		Properties runtimeProperties = Context.getRuntimeProperties();
+		runtimeProperties.remove("artemis.uri");
+		Context.setRuntimeProperties(runtimeProperties);
+		
+		try {
+			artemis.getBrokerUri();
+			fail("Expected IllegalStateException");
+		}
+		catch (IllegalStateException e) {
+			assertTrue(e.getMessage().contains("artemis.uri"));
+		}
+	}
+	
+	@Test
+	public void start_shouldNotAddTcpAcceptorWhenCredentialsAreBlank() throws Exception {
+		Path tempDir = Files.createTempDirectory("artemis-test-nocreds");
+		System.setProperty("OPENMRS_APPLICATION_DATA_DIRECTORY", tempDir.toAbsolutePath().toString());
+
+		ArtemisProperties props = new ArtemisProperties();
+		props.setEmbeddedEnabled(true);
+		props.setUsername("");
+		props.setPassword("");
+		props.setConsoleEnabled(false);
+		props.setConsolePort(8161);
+		props.setEmbeddedPort(0);
+
+		Artemis artemis = new Artemis(props);
+
+		try {
+			artemis.start();
+			Field f = Artemis.class.getDeclaredField("embeddedActiveMQ");
+			f.setAccessible(true);
+			EmbeddedActiveMQ embedded = (EmbeddedActiveMQ) f.get(artemis);
+			long acceptorCount = embedded.getActiveMQServer()
+			        .getConfiguration().getAcceptorConfigurations().stream()
+			        .filter(a -> a.getName().equals("tcp")).count();
+			assertEquals("No TCP acceptor should be created without credentials", 0, acceptorCount);
+		}
+		finally {
+			artemis.stop();
+			System.clearProperty("OPENMRS_APPLICATION_DATA_DIRECTORY");
+		}
+	}
+	
+	@Test
 	public void start_shouldStartEmbeddedActiveMQIfEnabled() throws Exception {
 		Path tempDir = Files.createTempDirectory("artemis-test");
 		System.setProperty("OPENMRS_APPLICATION_DATA_DIRECTORY", tempDir.toAbsolutePath().toString());
 		
 		Artemis artemis = new Artemis(createProperties(true));
-		artemis.setApplicationContext(applicationContext);
+		
 		try {
 			artemis.start();
 			assertEquals("vm://0", artemis.getBrokerUri());

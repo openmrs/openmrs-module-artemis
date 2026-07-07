@@ -21,19 +21,17 @@ import org.apache.activemq.artemis.dto.WebServerDTO;
 import org.apache.activemq.artemis.spi.core.security.ActiveMQSecurityManager;
 import org.apache.commons.lang.StringUtils;
 import org.openmrs.api.context.Context;
+import org.openmrs.module.artemis.jaas.ProgrammaticJaasConfiguration;
 import org.openmrs.util.OpenmrsUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.BeansException;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import javax.security.auth.login.Configuration;
 import java.io.File;
 import java.io.InputStream;
-import org.openmrs.module.artemis.jaas.ProgrammaticJaasConfiguration;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -43,7 +41,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Component("artemis.Artemis")
-public class Artemis implements ApplicationContextAware {
+public class Artemis {
 	
 	private static final Logger log = LoggerFactory.getLogger(Artemis.class);
 	
@@ -75,15 +73,15 @@ public class Artemis implements ApplicationContextAware {
 	
 	private WebServerComponent webServer;
 	
-	private ApplicationContext applicationContext;
-	
 	private ScheduledExecutorService monitorExecutor;
 	
 	private volatile boolean shuttingDown = false;
 	
 	private volatile int consecutiveRestartFailures = 0;
 	
-	private ArtemisProperties artemisProperties;
+	private ProgrammaticJaasConfiguration jaasConfiguration;
+	
+	private final ArtemisProperties artemisProperties;
 	
 	public Artemis(ArtemisProperties artemisProperties) {
 		this.artemisProperties = artemisProperties;
@@ -95,11 +93,6 @@ public class Artemis implements ApplicationContextAware {
 	
 	public String getPassword() {
 		return artemisProperties.getPassword();
-	}
-	
-	@Override
-	public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-		this.applicationContext = applicationContext;
 	}
 	
 	public String getBrokerUri() {
@@ -119,8 +112,9 @@ public class Artemis implements ApplicationContextAware {
 	@PostConstruct
 	public void start() throws Exception {
 		if (artemisProperties.getEmbeddedEnabled()) {
-			// Clear shuttingDown flag in case this instance is restarted after stop()
+			// Clear flags in case this instance is restarted after stop()
 			shuttingDown = false;
+			consecutiveRestartFailures = 0;
 			try {
 				String username = artemisProperties.getUsername();
 				String password = artemisProperties.getPassword();
@@ -150,8 +144,8 @@ public class Artemis implements ApplicationContextAware {
 				addressSettings.setMaxRedeliveryDelay(30000); // Cap the maximum delay at 30 seconds
 				config.addAddressSetting("#", addressSettings);
 
-				// Parse any properties from runtime properties with artemis. prefix.
-				config.parsePrefixedProperties(Context.getRuntimeProperties(), "artemis.");
+				// Parse broker-level config from runtime properties with artemis.broker. prefix.
+				config.parsePrefixedProperties(Context.getRuntimeProperties(), "artemis.broker.");
 				
 				embeddedActiveMQ = new EmbeddedActiveMQ();
 				embeddedActiveMQ.setConfiguration(config);
@@ -212,8 +206,17 @@ public class Artemis implements ApplicationContextAware {
 						
 						webServer = new WebServerComponent();
 						// We use your dataDir as the home/instance dir where Artemis will look for the WAR file
-						webServer.configure(webServerDTO, dataDir, dataDir); 
-						webServer.start();
+						webServer.configure(webServerDTO, dataDir, dataDir);
+						// Use the Artemis module classloader as context classloader so Jetty's webapp
+						// classloader inherits only jakarta.servlet classes, not any javax.servlet-based
+						// Hawtio version that another module (e.g. openmrs-module-camel) may have loaded.
+						ClassLoader savedClassLoader = Thread.currentThread().getContextClassLoader();
+						try {
+							Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
+							webServer.start();
+						} finally {
+							Thread.currentThread().setContextClassLoader(savedClassLoader);
+						}
 						log.info("Embedded Artemis Web Console started on http://localhost:{}/console", artemisProperties.getConsolePort());
 					} catch (Exception e) {
 						log.warn("Failed to start Artemis Web Console. Ensure artemis-web dependency and console.war are available.", e);
@@ -241,7 +244,8 @@ public class Artemis implements ApplicationContextAware {
 			try {
 				ProgrammaticJaasConfiguration cfg = new ProgrammaticJaasConfiguration(HAWTIO_REALM_NAME, username, password,
 				        HAWTIO_EMBEDDED_ROLE);
-				javax.security.auth.login.Configuration.setConfiguration(cfg);
+				jaasConfiguration = cfg;
+				Configuration.setConfiguration(cfg);
 				System.setProperty(HAWTIO_AUTHENTICATION_ENABLED, "true");
 				System.setProperty(HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES, "");
 				System.setProperty(HAWTIO_REALM, HAWTIO_REALM_NAME);
@@ -344,6 +348,11 @@ public class Artemis implements ApplicationContextAware {
 			catch (Exception e) {
 				log.error("Failed to stop Artemis Web Console", e);
 			}
+		}
+		
+		if (jaasConfiguration != null) {
+			Configuration.setConfiguration(jaasConfiguration.getPreviousConfiguration());
+			jaasConfiguration = null;
 		}
 	}
 }
