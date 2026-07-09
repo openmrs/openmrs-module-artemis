@@ -15,6 +15,7 @@ import org.apache.activemq.artemis.core.config.impl.ConfigurationImpl;
 import org.apache.activemq.artemis.core.security.CheckType;
 import org.apache.activemq.artemis.core.security.Role;
 import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
+import org.apache.activemq.artemis.core.settings.impl.AddressFullMessagePolicy;
 import org.apache.activemq.artemis.core.settings.impl.AddressSettings;
 import org.apache.activemq.artemis.dto.AppDTO;
 import org.apache.activemq.artemis.dto.WebServerDTO;
@@ -95,6 +96,10 @@ public class Artemis {
 		return artemisProperties.getPassword();
 	}
 	
+	public Long getSendCallTimeout() {
+		return artemisProperties.getSendCallTimeout();
+	}
+	
 	public String getBrokerUri() {
 		if (embeddedActiveMQ != null) {
 			return "vm://0"; //Use in-vm
@@ -142,6 +147,7 @@ public class Artemis {
 				addressSettings.setRedeliveryDelay(250); // Initial delay of 250 ms
 				addressSettings.setRedeliveryMultiplier(2.0); // Double the delay on each subsequent retry
 				addressSettings.setMaxRedeliveryDelay(30000); // Cap the maximum delay at 30 seconds
+				addressSettings.setAddressFullMessagePolicy(AddressFullMessagePolicy.FAIL);
 				config.addAddressSetting("#", addressSettings);
 
 				// Parse broker-level config from runtime properties with artemis.broker. prefix.

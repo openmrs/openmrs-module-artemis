@@ -10,6 +10,7 @@
 package org.openmrs.module.artemis;
 
 import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
+import org.apache.activemq.artemis.core.settings.impl.AddressFullMessagePolicy;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -132,6 +133,28 @@ public class ArtemisTest extends BaseContextMockTest {
 		try {
 			artemis.start();
 			assertEquals("vm://0", artemis.getBrokerUri());
+		}
+		finally {
+			artemis.stop();
+			System.clearProperty("OPENMRS_APPLICATION_DATA_DIRECTORY");
+		}
+	}
+	
+	@Test
+	public void start_shouldSetAddressFullPolicyToFail() throws Exception {
+		Path tempDir = Files.createTempDirectory("artemis-test-address-policy");
+		System.setProperty("OPENMRS_APPLICATION_DATA_DIRECTORY", tempDir.toAbsolutePath().toString());
+		
+		Artemis artemis = new Artemis(createProperties(true));
+		
+		try {
+			artemis.start();
+			Field f = Artemis.class.getDeclaredField("embeddedActiveMQ");
+			f.setAccessible(true);
+			EmbeddedActiveMQ embedded = (EmbeddedActiveMQ) f.get(artemis);
+			AddressFullMessagePolicy policy = embedded.getActiveMQServer().getAddressSettingsRepository().getMatch("#")
+			        .getAddressFullMessagePolicy();
+			assertEquals(AddressFullMessagePolicy.FAIL, policy);
 		}
 		finally {
 			artemis.stop();

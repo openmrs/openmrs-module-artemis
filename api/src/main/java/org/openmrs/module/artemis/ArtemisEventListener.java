@@ -213,6 +213,7 @@ public class ArtemisEventListener {
 
 			log.debug("Published event to Artemis: {}", event);
 		} catch (Exception e) {
+			log.error("Failed to publish event to Artemis target: {}", event.getTarget(), e);
 			throw new ArtemisException("Failed to publish event to Artemis target: " + event.getTarget(), e);
 		}
 	}

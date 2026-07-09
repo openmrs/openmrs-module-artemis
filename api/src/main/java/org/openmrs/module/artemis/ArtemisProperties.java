@@ -36,6 +36,9 @@ public class ArtemisProperties {
 	@Value("${artemis.embedded.console.host:127.0.0.1}")
 	private String consoleHost;
 	
+	@Value("${artemis.send.callTimeout:10000}")
+	private Long sendCallTimeout;
+	
 	public Boolean getEmbeddedEnabled() {
 		return embeddedEnabled;
 	}
@@ -90,5 +93,13 @@ public class ArtemisProperties {
 	
 	public void setEmbeddedPort(Integer embeddedPort) {
 		this.embeddedPort = embeddedPort;
+	}
+	
+	public Long getSendCallTimeout() {
+		return sendCallTimeout;
+	}
+	
+	public void setSendCallTimeout(Long sendCallTimeout) {
+		this.sendCallTimeout = sendCallTimeout;
 	}
 }

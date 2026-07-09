@@ -9,6 +9,9 @@
  */
 package org.openmrs.module.artemis;
 
+import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
+import org.apache.activemq.artemis.core.settings.impl.AddressFullMessagePolicy;
+import org.apache.activemq.artemis.core.settings.impl.AddressSettings;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.hamcrest.MatcherAssert;
 import org.junit.jupiter.api.Assertions;
@@ -18,6 +21,7 @@ import org.openmrs.event.broker.BrokerOutgoingEvent;
 import org.openmrs.web.test.jupiter.BaseModuleWebContextSensitiveTest;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.lang.reflect.Field;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.CoreMatchers.allOf;
@@ -98,6 +102,35 @@ public class ArtemisIntegrationTest extends BaseModuleWebContextSensitiveTest {
 		MatcherAssert.assertThat(testListener.getReceivedEvents(),
 		    hasItems(allOf(hasProperty("payload", equalTo(testPayload)))));
 		MatcherAssert.assertThat(testListener.getDlqAttempts(), equalTo(10)); // Default Artemis max-delivery-attempts is 10
+	}
+	
+	@Test
+	public void testPublishEventFailsFastWhenAddressFull() throws Exception {
+		Field f = Artemis.class.getDeclaredField("embeddedActiveMQ");
+		f.setAccessible(true);
+		EmbeddedActiveMQ embedded = (EmbeddedActiveMQ) f.get(artemis);
+
+		String testQueue = "integration.test.address.full.queue";
+
+		AddressSettings settings = new AddressSettings();
+		settings.setAddressFullMessagePolicy(AddressFullMessagePolicy.FAIL);
+		settings.setMaxSizeMessages(1);
+		embedded.getActiveMQServer().getAddressSettingsRepository().addMatch(testQueue, settings);
+
+		try {
+			eventPublisher.publishEvent(new BrokerOutgoingEvent<>("msg1", testQueue, BROKER_ID));
+
+			long start = System.currentTimeMillis();
+			Assertions.assertThrows(Exception.class,
+			    () -> eventPublisher.publishEvent(new BrokerOutgoingEvent<>("msg2", testQueue, BROKER_ID)));
+			long duration = System.currentTimeMillis() - start;
+
+			Assertions.assertTrue(duration < 1000,
+			    "Expected fast failure due to FAIL policy but send blocked for " + duration + "ms");
+		}
+		finally {
+			embedded.getActiveMQServer().getAddressSettingsRepository().removeMatch(testQueue);
+		}
 	}
 	
 	@Test
