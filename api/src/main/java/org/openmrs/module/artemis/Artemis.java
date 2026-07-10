@@ -15,7 +15,7 @@ import org.apache.activemq.artemis.core.config.impl.ConfigurationImpl;
 import org.apache.activemq.artemis.core.security.CheckType;
 import org.apache.activemq.artemis.core.security.Role;
 import org.apache.activemq.artemis.core.server.embedded.EmbeddedActiveMQ;
-import org.apache.activemq.artemis.core.settings.impl.AddressFullMessagePolicy;
+import org.apache.activemq.artemis.core.settings.impl.DiskFullMessagePolicy;
 import org.apache.activemq.artemis.core.settings.impl.AddressSettings;
 import org.apache.activemq.artemis.dto.AppDTO;
 import org.apache.activemq.artemis.dto.WebServerDTO;
@@ -131,7 +131,7 @@ public class Artemis {
 					config.addAcceptorConfiguration("tcp", "tcp://0.0.0.0:" + artemisProperties.getEmbeddedPort()); // assign the configured port (0 means random free port)
 				}
 				config.setSecurityEnabled(hasCredentials).setJMXManagementEnabled(true);
-				
+
 				String dataDir = OpenmrsUtil.getApplicationDataDirectory() + File.separator + "artemis";
 				config.setBindingsDirectory(dataDir + File.separator + "bindings");
 				config.setJournalDirectory(dataDir + File.separator + "journal");
@@ -147,7 +147,7 @@ public class Artemis {
 				addressSettings.setRedeliveryDelay(250); // Initial delay of 250 ms
 				addressSettings.setRedeliveryMultiplier(2.0); // Double the delay on each subsequent retry
 				addressSettings.setMaxRedeliveryDelay(30000); // Cap the maximum delay at 30 seconds
-				addressSettings.setAddressFullMessagePolicy(AddressFullMessagePolicy.FAIL);
+				addressSettings.setDiskFullMessagePolicy(DiskFullMessagePolicy.FAIL);
 				config.addAddressSetting("#", addressSettings);
 
 				// Parse broker-level config from runtime properties with artemis.broker. prefix.

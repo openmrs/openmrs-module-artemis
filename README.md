@@ -24,17 +24,17 @@ Configuration
 -------------
 The module can be configured via your `openmrs-runtime.properties` file. If no properties are provided, the module defaults to running an embedded broker on a random free TCP port with the web console enabled on port `8161`.
 
-| Property | Default     | Description                                                                                                                                                                                                                                 |
-| :--- |:------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `artemis.embedded.enabled` | `true`      | Set to `false` to disable the embedded broker (e.g., if you are connecting to an external broker).                                                                                                                                          |
-| `artemis.embedded.port` | `0`         | The TCP port for the embedded broker. `0` automatically assigns a random free port.                                                                                                                                                         |
-| `artemis.embedded.console.enabled` | `false`     | Set to `true` to enable the embedded web management console.                                                                                                                                                                                |
-| `artemis.embedded.console.port` | `8161`      | The HTTP port for the web management console.                                                                                                                                                                                               |
-| `artemis.embedded.console.host` | `127.0.0.1` | The host/address the console binds to. Defaults to loopback; set to 0.0.0.0 or a specific interface to expose remotely (not recommended).                                                                                                   |
-| `artemis.user` | *(none)*    | Username for broker authentication and/or embedded console. If left empty, no network acceptor is opened and the embedded broker remains in-vm only.                                                                                        |
-| `artemis.password` | *(none)*    | Password for broker authentication and/or embedded console. If left empty, no network acceptor is opened and the embedded broker remains in-vm only.                                                                                        |
-| `artemis.uri` | *(auto)*    | The URI used to connect to the broker. If using an external broker, set this to your broker's URI (e.g., `tcp://external-host:61616`).                                                                                                      |
-| `artemis.send.callTimeout` | `10000`     | Milliseconds a send call will wait for the broker to accept a message before throwing an exception. Set to `0` to block indefinitely, or a positive value (e.g., `5000`) to fail fast. |
+| Property | Default     | Description                                                                                                                                                                                                                                                              |
+| :--- |:------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `artemis.embedded.enabled` | `true`      | Set to `false` to disable the embedded broker (e.g., if you are connecting to an external broker).                                                                                                                                                                       |
+| `artemis.embedded.port` | `0`         | The TCP port for the embedded broker. `0` automatically assigns a random free port.                                                                                                                                                                                      |
+| `artemis.embedded.console.enabled` | `false`     | Set to `true` to enable the embedded web management console.                                                                                                                                                                                                             |
+| `artemis.embedded.console.port` | `8161`      | The HTTP port for the web management console.                                                                                                                                                                                                                            |
+| `artemis.embedded.console.host` | `127.0.0.1` | The host/address the console binds to. Defaults to loopback; set to 0.0.0.0 or a specific interface to expose remotely (not recommended).                                                                                                                                |
+| `artemis.user` | *(none)*    | Username for broker authentication and/or embedded console. If left empty, no network acceptor is opened and the embedded broker remains in-vm only.                                                                                                                     |
+| `artemis.password` | *(none)*    | Password for broker authentication and/or embedded console. If left empty, no network acceptor is opened and the embedded broker remains in-vm only.                                                                                                                     |
+| `artemis.uri` | *(auto)*    | The URI used to connect to the broker. If using an external broker, set this to your broker's URI (e.g., `tcp://external-host:61616`).                                                                                                                                   |
+| `artemis.send.callTimeout` | `10000`     | Milliseconds any blocking call on the connection (session creation, transacted commits, sends) will wait before throwing an exception. Set to a positive value (e.g., `5000`) to fail fast; use `0` or a negative value to keep the Artemis client default of 30 000 ms. |
 
 ### Advanced broker configuration
 
@@ -46,10 +46,7 @@ artemis.broker.maxDiskUsage=85
 
 ### Back-pressure and disk-full behavior
 
-When the broker's disk fills up (controlled by `artemis.broker.maxDiskUsage`, default 90 %), Artemis stops accepting new messages. The module applies two layers of protection to prevent producer threads from blocking indefinitely:
-
-1. **Send timeout (`artemis.send.callTimeout`)** — the JMS client throws an exception after the configured number of milliseconds instead of waiting forever.
-2. **Address-full policy** — the embedded broker is configured with `AddressFullMessagePolicy.FAIL`, so any address that reaches its configured `maxSizeBytes` immediately rejects new messages with an exception rather than blocking the producer. (By default `maxSizeBytes` is unlimited, so this only applies if you set a per-address limit via `artemis.broker.*` properties or the web console.)
+The embedded broker sets `DiskFullMessagePolicy.FAIL` to prevent producer threads from blocking indefinitely when the disk fills up. When the data directory crosses `artemis.broker.maxDiskUsage` (default 90 %), the broker rejects new producer credit requests immediately rather than parking the producer thread. Without this policy, a full disk blocks the calling thread until space is freed — `artemis.send.callTimeout` does not protect against this because producer credits are acquired before the packet the timeout bounds.
 
 Usage Examples
 --------------

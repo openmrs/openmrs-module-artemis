@@ -32,7 +32,7 @@ public class ArtemisConfig {
 			brokerUri += (brokerUri.contains("?") ? "&" : "?") + "failoverAttempts=3";
 		}
 		Long callTimeout = artemis.getSendCallTimeout();
-		if (brokerUri != null && callTimeout >= 0 && !brokerUri.contains("callTimeout")) {
+		if (brokerUri != null && callTimeout > 0 && !brokerUri.contains("callTimeout")) {
 			brokerUri += (brokerUri.contains("?") ? "&" : "?") + "callTimeout=" + callTimeout;
 		}
 		

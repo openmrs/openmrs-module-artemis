@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openmrs.event.EventPublisher;
 import org.openmrs.event.broker.BrokerOutgoingEvent;
+
+import java.lang.reflect.Method;
 import org.openmrs.web.test.jupiter.BaseModuleWebContextSensitiveTest;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -130,6 +132,31 @@ public class ArtemisIntegrationTest extends BaseModuleWebContextSensitiveTest {
 		}
 		finally {
 			embedded.getActiveMQServer().getAddressSettingsRepository().removeMatch(testQueue);
+		}
+	}
+	
+	@Test
+	public void testPublishEventFailsFastWhenDiskFull() throws Exception {
+		Field f = Artemis.class.getDeclaredField("embeddedActiveMQ");
+		f.setAccessible(true);
+		EmbeddedActiveMQ embedded = (EmbeddedActiveMQ) f.get(artemis);
+
+		Object pagingManager = embedded.getActiveMQServer().getPagingManager();
+		Method setDiskFull = pagingManager.getClass().getDeclaredMethod("setDiskFull", boolean.class);
+		setDiskFull.setAccessible(true);
+		setDiskFull.invoke(pagingManager, true);
+
+		try {
+			long start = System.currentTimeMillis();
+			Assertions.assertThrows(Exception.class,
+			    () -> eventPublisher.publishEvent(new BrokerOutgoingEvent<>("msg", "integration.test.disk.full.queue", BROKER_ID)));
+			long duration = System.currentTimeMillis() - start;
+
+			Assertions.assertTrue(duration < 1000,
+			    "Expected fast failure due to DiskFullMessagePolicy.FAIL but send blocked for " + duration + "ms");
+		}
+		finally {
+			setDiskFull.invoke(pagingManager, false);
 		}
 	}
 	
