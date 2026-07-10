@@ -10,6 +10,7 @@
 package org.openmrs.module.artemis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.activemq.artemis.api.core.ActiveMQAddressFullException;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.apache.activemq.artemis.jms.client.ActiveMQMessage;
 import org.apache.commons.lang.StringUtils;
@@ -213,6 +214,15 @@ public class ArtemisEventListener {
 
 			log.debug("Published event to Artemis: {}", event);
 		} catch (Exception e) {
+			Throwable cause = e;
+			while (cause != null && !(cause instanceof ActiveMQAddressFullException)) {
+				cause = cause.getCause();
+			}
+			if (cause != null) {
+				log.error("Artemis broker disk is full (AMQ219058). Free up disk space on the volume containing "
+				        + "the OpenMRS data directory, or increase the threshold in openmrs-runtime.properties: "
+				        + "artemis.broker.maxDiskUsage=95");
+			}
 			log.error("Failed to publish event to Artemis target: {}", event.getTarget(), e);
 			throw new ArtemisException("Failed to publish event to Artemis target: " + event.getTarget(), e);
 		}

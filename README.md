@@ -48,6 +48,23 @@ artemis.broker.maxDiskUsage=85
 
 The embedded broker sets `DiskFullMessagePolicy.FAIL` to prevent producer threads from blocking indefinitely when the disk fills up. When the data directory crosses `artemis.broker.maxDiskUsage` (default 90 %), the broker rejects new producer credit requests immediately rather than parking the producer thread. Without this policy, a full disk blocks the calling thread until space is freed — `artemis.send.callTimeout` does not protect against this because producer credits are acquired before the packet the timeout bounds.
 
+Troubleshooting
+---------------
+
+### `AMQ219058: Address "QUEUE_NAME" is full`
+
+This error (`javax.jms.JMSException: AMQ219058: Address "QUEUE_NAME" is full`) means the broker's disk has crossed the `maxDiskUsage` threshold (default 90 %) and is refusing new messages to prevent the disk from filling completely.
+
+**Option 1 — Free up disk space.** Remove unneeded files from the volume that holds the OpenMRS application data directory until disk usage drops below the threshold. The broker will resume accepting messages automatically once the next disk scan detects the freed space (scan interval is controlled by `artemis.broker.diskScanPeriod`, default 5 000 ms).
+
+**Option 2 — Raise the threshold.** Add the following to `openmrs-runtime.properties` to allow the broker to use more of the disk before blocking:
+
+```properties
+artemis.broker.maxDiskUsage=95
+```
+
+Use this only as a short-term measure while you address the underlying disk-space issue.
+
 Usage Examples
 --------------
 
