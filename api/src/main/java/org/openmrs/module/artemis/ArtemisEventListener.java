@@ -219,7 +219,8 @@ public class ArtemisEventListener {
 				cause = cause.getCause();
 			}
 			if (cause != null) {
-				log.error("Artemis broker disk is full (AMQ219058). Free up disk space on the volume containing "
+				log.error("The broker rejected the message because a resource limit was reached. "
+						+ "Artemis broker disk may be full (AMQ219058). Free up disk space on the volume containing "
 				        + "the OpenMRS data directory, or increase the threshold in openmrs-runtime.properties: "
 				        + "artemis.broker.maxDiskUsage=95");
 			}
