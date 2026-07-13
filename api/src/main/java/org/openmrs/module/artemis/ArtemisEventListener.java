@@ -39,8 +39,11 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.openmrs.module.artemis.Artemis.BROKER_ID;
 
@@ -71,8 +74,8 @@ public class ArtemisEventListener {
 	private final JmsTemplate jmsTemplate;
 
 	private final List<DefaultMessageListenerContainer> listenerContainers = new ArrayList<>();
-	
-	private boolean initialized = false;
+
+	private final Set<String> initializedSources = new HashSet<>();
 
 	public ArtemisEventListener(ObjectMapper objectMapper, EventPublisher eventPublisher,
 	                            @Value("${event.broker.default:artemis}") String defaultEventBroker,
@@ -88,33 +91,33 @@ public class ArtemisEventListener {
 	}
 
 	@EventListener
-	public void setupListeners(ContextRefreshedEvent event) {
-		if (initialized) {
-			return;
-		}
-		initialized = true;
-		
-		Map<String, List<BrokerEventListenerFactory.Listener>> listenersBySource = new HashMap<>();
+	public synchronized void setupListeners(ContextRefreshedEvent event) {
+		Set<String> newSources = new HashSet<>();
 		for (BrokerEventListenerFactory.Listener listener : listenerFactory.getListeners()) {
 			if ((StringUtils.isBlank(listener.getBroker()) && BROKER_ID.equals(defaultEventBroker)) || BROKER_ID.equals(listener.getBroker())) {
-				listenersBySource.computeIfAbsent(listener.getSource(), k -> new ArrayList<>()).add(listener);
+				newSources.add(listener.getSource());
 			}
 		}
+		newSources.removeAll(initializedSources);
 
-		for (Map.Entry<String, List<BrokerEventListenerFactory.Listener>> entry : listenersBySource.entrySet()) {
-			String source = entry.getKey();
-			List<BrokerEventListenerFactory.Listener> listeners = entry.getValue();
-
+		for (String source : newSources) {
 			DefaultMessageListenerContainer container = new DefaultMessageListenerContainer();
 			container.setConnectionFactory(this.listenerConnectionFactory);
 			container.setDestinationName(source);
 			container.setSessionTransacted(true); // Ensures message is redelivered if an exception is thrown
-			
+
 			container.setMessageListener((MessageListener) message -> {
 				try {
+					// Query listeners dynamically so modules registered after initial startup are included
+					List<BrokerEventListenerFactory.Listener> listeners = listenerFactory.getListeners().stream()
+					    .filter(l -> source.equals(l.getSource())
+					            && ((StringUtils.isBlank(l.getBroker()) && BROKER_ID.equals(defaultEventBroker))
+					                    || BROKER_ID.equals(l.getBroker())))
+					    .collect(Collectors.toList());
+
 					Object inputStreamPayload = null;
 					String stringPayload = null;
-					
+
 					Map<String, Object> headers = new HashMap<>();
 					Enumeration<?> propertyNames = message.getPropertyNames();
 					if (propertyNames != null) {
@@ -145,7 +148,7 @@ public class ArtemisEventListener {
 									continue;
 								}
 							}
-							
+
 							if (String.class.isAssignableFrom(listener.getPayloadType())) {
 								payload = stringPayload;
 							} else if (EventPayload.class.isAssignableFrom(listener.getPayloadType())) {
@@ -178,8 +181,9 @@ public class ArtemisEventListener {
 			container.initialize();
 			container.start();
 			listenerContainers.add(container);
+			initializedSources.add(source);
+			log.info("ArtemisEventListener: started JMS container for source '{}'.", source);
 		}
-		log.info("ArtemisEventListener connected to Artemis broker successfully.");
 	}
 
 	@EventListener
