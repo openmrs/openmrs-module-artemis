@@ -36,6 +36,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -65,6 +66,10 @@ public class Artemis {
 	static final String HAWTIO_REALM_NAME = "activemq";
 	
 	static final String HAWTIO_EMBEDDED_ROLE = "amq";
+	
+	private static final String[] HAWTIO_PROPERTY_NAMES = { HAWTIO_AUTHENTICATION_ENABLED,
+	        HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES, HAWTIO_OFFLINE, HAWTIO_REALM, HAWTIO_ROLE, HAWTIO_ROLES,
+	        HAWTIO_ROLE_PRINCIPAL_CLASSES, HAWTIO_USER_PRINCIPAL_CLASSES };
 	
 	public static final String BROKER_ID = "artemis";
 	
@@ -124,7 +129,7 @@ public class Artemis {
 				String username = artemisProperties.getUsername();
 				String password = artemisProperties.getPassword();
 				boolean hasCredentials = StringUtils.isNotBlank(username) && StringUtils.isNotBlank(password);
-				
+
 				ConfigurationImpl config = new ConfigurationImpl().addAcceptorConfiguration("in-vm", "vm://0");
 				// Only add a TCP acceptor (exposed to the network) when credentials are configured
 				if (hasCredentials) {
@@ -152,64 +157,69 @@ public class Artemis {
 
 				// Parse broker-level config from runtime properties with artemis.broker. prefix.
 				config.parsePrefixedProperties(Context.getRuntimeProperties(), "artemis.broker.");
-				
+
 				embeddedActiveMQ = new EmbeddedActiveMQ();
 				embeddedActiveMQ.setConfiguration(config);
-				
+
 				if (hasCredentials) {
 					embeddedActiveMQ.setSecurityManager(new ActiveMQSecurityManager() {
 						@Override
 						public boolean validateUser(String user, String pass) {
 							return username.equals(user) && password.equals(pass);
 						}
-						
+
 						@Override
 						public boolean validateUserAndRole(String user, String pass, Set<Role> roles, CheckType checkType) {
 							return validateUser(user, pass);
 						}
 					});
 				}
-				
+
 				embeddedActiveMQ.start();
-				
+
 				if (artemisProperties.getConsoleEnabled()) {
+					// Resolve console credentials: use console-specific creds if set, otherwise fall back to broker creds
+					String consoleUsername = StringUtils.isNotBlank(artemisProperties.getConsoleUsername())
+					    ? artemisProperties.getConsoleUsername() : username;
+					String consolePassword = StringUtils.isNotBlank(artemisProperties.getConsolePassword())
+					    ? artemisProperties.getConsolePassword() : password;
+					boolean hasConsoleCredentials = StringUtils.isNotBlank(consoleUsername) && StringUtils.isNotBlank(consolePassword);
+					Properties hawtioSnapshot = snapshotHawtioProperties();
 					try {
 						File dataDirFile = new File(dataDir);
 						if (!dataDirFile.exists()) {
 							dataDirFile.mkdirs();
 						}
-						
+
 						// Artemis WebServerComponent strictly looks for WAR files inside a "web" subfolder
 						File webDirFile = new File(dataDirFile, "console");
 						if (!webDirFile.exists()) {
 							webDirFile.mkdirs();
 						}
-						
+
 						File consoleWar = new File(webDirFile, "console.war");
-						if (!consoleWar.exists()) {
-							try (InputStream is = getClass().getResourceAsStream("/console.war")) {
-								if (is != null) {
-									Files.copy(is, consoleWar.toPath(), StandardCopyOption.REPLACE_EXISTING);
-								} else {
-									log.warn("console.war not found in classpath. Artemis Web Console may fail to start or return a 404 error.");
-								}
+						try (InputStream is = getClass().getResourceAsStream("/console.war")) {
+							if (is != null) {
+								Files.copy(is, consoleWar.toPath(), StandardCopyOption.REPLACE_EXISTING);
+							} else {
+								log.warn("console.war not found in classpath. Artemis Web Console may fail to start or return a 404 error.");
 							}
 						}
-						
-						configureHawtioAuthentication(username, password, hasCredentials);
-						
+
+						configureHawtioAuthentication(consoleUsername, consolePassword, hasConsoleCredentials);
+
 						WebServerDTO webServerDTO = new WebServerDTO();
 						// Bind the embedded console to the configured host (defaults to loopback) to avoid exposing it on all interfaces
 						webServerDTO.bind = "http://" + artemisProperties.getConsoleHost() + ":" + artemisProperties.getConsolePort();
 						webServerDTO.path = "console";
-						
+
 						AppDTO app = new AppDTO();
 						app.url = "console";
 						app.war = "console.war"; // The console WAR file name
-						
+
 						webServerDTO.apps = new ArrayList<>();
 						webServerDTO.apps.add(app);
-						
+
 						webServer = new WebServerComponent();
 						// We use your dataDir as the home/instance dir where Artemis will look for the WAR file
 						webServer.configure(webServerDTO, dataDir, dataDir);
@@ -226,11 +236,15 @@ public class Artemis {
 						log.info("Embedded Artemis Web Console started on http://localhost:{}/console", artemisProperties.getConsolePort());
 					} catch (Exception e) {
 						log.warn("Failed to start Artemis Web Console. Ensure artemis-web dependency and console.war are available.", e);
+					} finally {
+						// Hawtio reads system properties only during startup; restore pre-existing values
+						// so our settings don't bleed into other modules sharing the same JVM.
+						restoreHawtioProperties(hawtioSnapshot);
 					}
 				}
 
 				log.info("Embedded Artemis broker started successfully. Starting to monitor it...");
-				
+
 				startHealthMonitor();
 			}
 			catch (Exception e) {
@@ -242,8 +256,6 @@ public class Artemis {
 	}
 	
 	void configureHawtioAuthentication(String username, String password, boolean hasCredentials) {
-		clearHawtioAuthenticationProperties();
-		
 		if (hasCredentials) {
 			// Hawtio 4.7 auto-discovers Tomcat auth providers unless discovery is disabled explicitly.
 			// Our embedded console runs on Jetty with a programmatic JAAS realm instead.
@@ -265,20 +277,34 @@ public class Artemis {
 			}
 		} else {
 			// Bypass Hawtio's JAAS authentication requirement for embedded setups
+			for (String name : HAWTIO_PROPERTY_NAMES) {
+				System.clearProperty(name);
+			}
 			System.setProperty(HAWTIO_AUTHENTICATION_ENABLED, "false");
 		}
 		
 		System.setProperty(HAWTIO_OFFLINE, "true");
 	}
 	
-	private void clearHawtioAuthenticationProperties() {
-		System.clearProperty(HAWTIO_AUTHENTICATION_ENABLED);
-		System.clearProperty(HAWTIO_AUTHENTICATION_CONTAINER_DISCOVERY_CLASSES);
-		System.clearProperty(HAWTIO_REALM);
-		System.clearProperty(HAWTIO_ROLE);
-		System.clearProperty(HAWTIO_ROLES);
-		System.clearProperty(HAWTIO_ROLE_PRINCIPAL_CLASSES);
-		System.clearProperty(HAWTIO_USER_PRINCIPAL_CLASSES);
+	private Properties snapshotHawtioProperties() {
+		Properties snapshot = new Properties();
+		for (String name : HAWTIO_PROPERTY_NAMES) {
+			String value = System.getProperty(name);
+			if (value != null) {
+				snapshot.setProperty(name, value);
+			}
+		}
+		return snapshot;
+	}
+	
+	private void restoreHawtioProperties(Properties snapshot) {
+		for (String name : HAWTIO_PROPERTY_NAMES) {
+			if (snapshot.containsKey(name)) {
+				System.setProperty(name, snapshot.getProperty(name));
+			} else {
+				System.clearProperty(name);
+			}
+		}
 	}
 	
 	private void startHealthMonitor() {

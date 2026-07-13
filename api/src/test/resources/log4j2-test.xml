@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Configuration xmlns="http://logging.apache.org/log4j/2.0/config">
+	<Appenders>
+		<Console name="CONSOLE" target="SYSTEM_OUT">
+			<PatternLayout pattern="%p - %C{1}.%M(%L) |%d{ISO8601}| %m%n" />
+		</Console>
+	</Appenders>
+	<Loggers>
+		<Logger name="org.openmrs.module.artemis" level="ERROR" />
+		<Root level="OFF">
+			<AppenderRef ref="CONSOLE" />
+		</Root>
+	</Loggers>
+</Configuration>

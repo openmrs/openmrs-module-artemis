@@ -13,6 +13,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.activemq.artemis.api.core.ActiveMQAddressFullException;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.apache.activemq.artemis.jms.client.ActiveMQMessage;
+import org.apache.activemq.artemis.utils.ActiveMQBufferInputStream;
+import org.springframework.core.ResolvableType;
 import org.apache.commons.lang.StringUtils;
 import org.openmrs.event.EventPayload;
 import org.openmrs.event.EventPublisher;
@@ -51,6 +53,8 @@ import static org.openmrs.module.artemis.Artemis.BROKER_ID;
  *   <li>Listeners must be idempotent—they may be called multiple times for the same message.</li>
  *   <li>A failure in one listener will re-run all listeners on that source.</li>
  *   <li>Use the JMS delivery count header (JMSXDeliveryCount) or a database-backed idempotency key if you need to detect retries.</li>
+ *   <li>Listener methods run on JMS consumer threads with no OpenMRS session, the same as a plain Spring {@code @EventListener}.
+ *       Wrap any {@link org.openmrs.api.context.Context} API calls in {@code Context.openSession()} / {@code Context.closeSession()}.</li>
  * </ul>
  */
 @Component("artemis.ArtemisEventListener")
@@ -124,7 +128,8 @@ public class ArtemisEventListener {
 						Object payload;
 						if (InputStream.class.isAssignableFrom(listener.getPayloadType())) {
 							if (inputStreamPayload == null && message instanceof ActiveMQMessage) {
-								inputStreamPayload = ((ActiveMQMessage) message).getCoreMessage().getBodyInputStream();
+								inputStreamPayload = new ActiveMQBufferInputStream(
+								    ((ActiveMQMessage) message).getCoreMessage().getBodyBuffer());
 							}
 
 							payload = inputStreamPayload;
@@ -143,15 +148,23 @@ public class ArtemisEventListener {
 							
 							if (String.class.isAssignableFrom(listener.getPayloadType())) {
 								payload = stringPayload;
+							} else if (EventPayload.class.isAssignableFrom(listener.getPayloadType())) {
+								EventPayload eventPayload = (EventPayload) listener.getPayloadType()
+								    .getDeclaredConstructor().newInstance();
+								eventPayload.fromPayload(stringPayload);
+								payload = eventPayload;
 							} else {
-								// Deserialize via Jackson. Custom EventPayload implementations should ensure their
-								// serialized form is Jackson-compatible. Note: if custom deserialization is needed
-								// beyond Jackson's capabilities, consider implementing a custom deserializer.
 								payload = objectMapper.readValue(stringPayload, listener.getPayloadType());
 							}
 						}
 
-						BrokerIncomingEvent<?> incomingEvent = new BrokerIncomingEvent<>(payload, listener.getSource(), BROKER_ID);
+						final Class<?> payloadType = listener.getPayloadType();
+						BrokerIncomingEvent<?> incomingEvent = new BrokerIncomingEvent<>(payload, listener.getSource(), BROKER_ID) {
+							@Override
+							public ResolvableType getResolvableType() {
+								return ResolvableType.forClassWithGenerics(BrokerIncomingEvent.class, payloadType);
+							}
+						};
 						incomingEvent.setHeaders(headers);
 						eventPublisher.publishEvent(incomingEvent);
 
@@ -201,7 +214,12 @@ public class ArtemisEventListener {
 							// and map to Artemis message grouping, so they are preserved
 							if (!headerName.startsWith("JMSX") || "JMSXGroupID".equals(headerName)
 							        || "JMSXGroupSeq".equals(headerName)) {
-								message.setObjectProperty(headerName, entry.getValue());
+								Object value = entry.getValue();
+								if (isJmsPrimitive(value)) {
+									message.setObjectProperty(headerName, value);
+								} else {
+									message.setStringProperty(headerName, objectMapper.writeValueAsString(value));
+								}
 							}
 						}
 					}
@@ -229,6 +247,12 @@ public class ArtemisEventListener {
 		}
 	}
 	
+	private static boolean isJmsPrimitive(Object value) {
+		return value == null || value instanceof Boolean || value instanceof Byte
+		    || value instanceof Short || value instanceof Integer || value instanceof Long
+		    || value instanceof Float || value instanceof Double || value instanceof String;
+	}
+
 	@PreDestroy
 	public void cleanup() {
 		try {

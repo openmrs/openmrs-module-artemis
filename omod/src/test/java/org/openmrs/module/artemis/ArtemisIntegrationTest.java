@@ -19,8 +19,11 @@ import org.openmrs.event.broker.BrokerOutgoingEvent;
 import org.openmrs.web.test.jupiter.BaseModuleWebContextSensitiveTest;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
@@ -70,6 +73,21 @@ public class ArtemisIntegrationTest extends BaseModuleWebContextSensitiveTest {
 		    testListener.getReceivedEvents(),
 		    hasItems(allOf(hasProperty("payload", equalTo(testPayload))),
 		        allOf(hasProperty("payload", equalTo(testPayload)))));
+	}
+	
+	@Test
+	public void testPublishAndReceiveInputStreamEvent() throws Exception {
+		byte[] testBytes = "InputStream test payload".getBytes(StandardCharsets.UTF_8);
+
+		testListener.resetEventsAndLatch(1);
+
+		BrokerOutgoingEvent<InputStream> outgoingEvent = new BrokerOutgoingEvent<>(
+		    new ByteArrayInputStream(testBytes), BrokerEventTestListener.INPUTSTREAM_QUEUE, BROKER_ID);
+		eventPublisher.publishEvent(outgoingEvent);
+
+		testListener.await(30, TimeUnit.SECONDS);
+
+		Assertions.assertArrayEquals(testBytes, testListener.getReceivedInputStreamBytes());
 	}
 	
 	@Test
