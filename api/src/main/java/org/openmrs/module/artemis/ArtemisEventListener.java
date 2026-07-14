@@ -11,6 +11,7 @@ package org.openmrs.module.artemis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.activemq.artemis.api.core.ActiveMQAddressFullException;
+import org.apache.activemq.artemis.api.core.ActiveMQBuffer;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.apache.activemq.artemis.jms.client.ActiveMQMessage;
 import org.apache.activemq.artemis.utils.ActiveMQBufferInputStream;
@@ -35,6 +36,7 @@ import javax.annotation.PreDestroy;
 import javax.jms.Message;
 import javax.jms.MessageListener;
 import javax.jms.TextMessage;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -115,7 +117,6 @@ public class ArtemisEventListener {
 					                    || BROKER_ID.equals(l.getBroker())))
 					    .collect(Collectors.toList());
 
-					Object inputStreamPayload = null;
 					String stringPayload = null;
 
 					Map<String, Object> headers = new HashMap<>();
@@ -127,15 +128,16 @@ public class ArtemisEventListener {
 						}
 					}
 
+					byte[] inputStreamBytes = null;
 					for (BrokerEventListenerFactory.Listener listener : listeners) {
 						Object payload;
 						if (InputStream.class.isAssignableFrom(listener.getPayloadType())) {
-							if (inputStreamPayload == null && message instanceof ActiveMQMessage) {
-								inputStreamPayload = new ActiveMQBufferInputStream(
-								    ((ActiveMQMessage) message).getCoreMessage().getBodyBuffer());
+							if (inputStreamBytes == null && message instanceof ActiveMQMessage) {
+								ActiveMQBuffer bodyBuffer = ((ActiveMQMessage) message).getCoreMessage().getBodyBuffer();
+								inputStreamBytes = new ActiveMQBufferInputStream(bodyBuffer).readAllBytes();
+								bodyBuffer.resetReaderIndex();
 							}
-
-							payload = inputStreamPayload;
+							payload = inputStreamBytes != null ? new ByteArrayInputStream(inputStreamBytes) : null;
 						} else {
 							if (stringPayload == null) {
 								if (message instanceof TextMessage) {
@@ -222,7 +224,7 @@ public class ArtemisEventListener {
 								if (isJmsPrimitive(value)) {
 									message.setObjectProperty(headerName, value);
 								} else {
-									message.setStringProperty(headerName, objectMapper.writeValueAsString(value));
+									log.warn("Skipping header '{}': only JMS primitive types are supported (Boolean, Byte, Short, Integer, Long, Float, Double, String)", headerName);
 								}
 							}
 						}
