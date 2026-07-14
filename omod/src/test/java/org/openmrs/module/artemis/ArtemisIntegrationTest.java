@@ -15,13 +15,22 @@ import org.hamcrest.MatcherAssert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openmrs.event.EventPublisher;
+import org.openmrs.event.broker.BrokerEventListenerFactory;
 import org.openmrs.event.broker.BrokerOutgoingEvent;
 import org.openmrs.web.test.jupiter.BaseModuleWebContextSensitiveTest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.event.ContextRefreshedEvent;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.CoreMatchers.allOf;
@@ -42,6 +51,12 @@ public class ArtemisIntegrationTest extends BaseModuleWebContextSensitiveTest {
 	
 	@Autowired
 	private Artemis artemis;
+	
+	@Autowired
+	private ApplicationContext applicationContext;
+	
+	@Autowired
+	private BrokerEventListenerFactory listenerFactory;
 	
 	@Override
 	public Properties getRuntimeProperties() {
@@ -70,6 +85,77 @@ public class ArtemisIntegrationTest extends BaseModuleWebContextSensitiveTest {
 		    testListener.getReceivedEvents(),
 		    hasItems(allOf(hasProperty("payload", equalTo(testPayload))),
 		        allOf(hasProperty("payload", equalTo(testPayload)))));
+	}
+	
+	@Test
+	public void testPublishAndReceiveInputStreamEvent() throws Exception {
+		byte[] testBytes = "InputStream test payload".getBytes(StandardCharsets.UTF_8);
+
+		testListener.resetEventsAndLatch(1);
+
+		BrokerOutgoingEvent<InputStream> outgoingEvent = new BrokerOutgoingEvent<>(
+		    new ByteArrayInputStream(testBytes), BrokerEventTestListener.INPUTSTREAM_QUEUE, BROKER_ID);
+		eventPublisher.publishEvent(outgoingEvent);
+
+		testListener.await(30, TimeUnit.SECONDS);
+
+		Assertions.assertArrayEquals(testBytes, testListener.getReceivedInputStreamBytes());
+	}
+	
+	@Test
+	public void testRuntimeModuleListenerReceivesMessages() throws Exception {
+		// Simulate BrokerEventListenerFactory discovering a @BrokerEventListener from a module that
+		// started after the initial ContextRefreshedEvent (the normal OpenMRS runtime-module path).
+		Field listenersField = BrokerEventListenerFactory.class.getDeclaredField("listeners");
+		listenersField.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		CopyOnWriteArrayList<BrokerEventListenerFactory.Listener> listeners =
+		    (CopyOnWriteArrayList<BrokerEventListenerFactory.Listener>) listenersField.get(listenerFactory);
+		listeners.addIfAbsent(new BrokerEventListenerFactory.Listener(
+		    BrokerEventTestListener.RUNTIME_QUEUE, Artemis.BROKER_ID, String.class));
+
+		// Simulate the ContextRefreshedEvent that OpenMRS fires when a module's context is refreshed.
+		// setupListeners should create a new JMS container for RUNTIME_QUEUE.
+		applicationContext.publishEvent(new ContextRefreshedEvent(applicationContext));
+
+		String testPayload = "Runtime module payload";
+		testListener.resetEventsAndLatch(1);
+		eventPublisher.publishEvent(new BrokerOutgoingEvent<>(testPayload,
+		    BrokerEventTestListener.RUNTIME_QUEUE, BROKER_ID));
+
+		testListener.await(30, TimeUnit.SECONDS);
+		Assertions.assertEquals(testPayload, testListener.getReceivedRuntimePayload());
+	}
+	
+	@Test
+	public void testPublishAndReceiveEventPayload() throws Exception {
+		SimpleEventPayload outgoing = new SimpleEventPayload("hello", "world");
+
+		testListener.resetEventsAndLatch(1);
+		eventPublisher.publishEvent(new BrokerOutgoingEvent<>(outgoing,
+		    BrokerEventTestListener.EVENTPAYLOAD_QUEUE, BROKER_ID));
+		testListener.await(30, TimeUnit.SECONDS);
+
+		SimpleEventPayload received = testListener.getReceivedEventPayload();
+		Assertions.assertNotNull(received);
+		Assertions.assertEquals("hello", received.getName());
+		Assertions.assertEquals("world", received.getValue());
+	}
+	
+	@Test
+	public void testPublishAndReceiveEventWithPrimitiveHeaders() throws Exception {
+		Map<String, Object> outgoingHeaders = new HashMap<>();
+		outgoingHeaders.put("stringHeader", "plain-value");
+		outgoingHeaders.put("intHeader", 42);
+
+		testListener.resetEventsAndLatch(2);
+		eventPublisher.publishEvent(new BrokerOutgoingEvent<>(
+		    "header test", BrokerEventTestListener.TEST_QUEUE, BROKER_ID, outgoingHeaders));
+		testListener.await(30, TimeUnit.SECONDS);
+
+		Map<String, Object> receivedHeaders = testListener.getReceivedEvents().get(0).getHeaders();
+		assertThat(receivedHeaders.get("stringHeader"), equalTo("plain-value"));
+		assertThat(receivedHeaders.get("intHeader"), equalTo(42));
 	}
 	
 	@Test

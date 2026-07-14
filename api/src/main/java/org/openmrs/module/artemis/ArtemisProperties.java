@@ -36,6 +36,12 @@ public class ArtemisProperties {
 	@Value("${artemis.embedded.console.host:127.0.0.1}")
 	private String consoleHost;
 	
+	@Value("${artemis.embedded.console.user:}")
+	private String consoleUsername;
+	
+	@Value("${artemis.embedded.console.password:}")
+	private String consolePassword;
+	
 	@Value("${artemis.send.callTimeout:10000}")
 	private Long sendCallTimeout;
 	
@@ -93,6 +99,22 @@ public class ArtemisProperties {
 	
 	public void setEmbeddedPort(Integer embeddedPort) {
 		this.embeddedPort = embeddedPort;
+	}
+	
+	public String getConsoleUsername() {
+		return consoleUsername;
+	}
+	
+	public void setConsoleUsername(String consoleUsername) {
+		this.consoleUsername = consoleUsername;
+	}
+	
+	public String getConsolePassword() {
+		return consolePassword;
+	}
+	
+	public void setConsolePassword(String consolePassword) {
+		this.consolePassword = consolePassword;
 	}
 	
 	public Long getSendCallTimeout() {

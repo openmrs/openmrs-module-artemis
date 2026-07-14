@@ -13,6 +13,8 @@ import org.openmrs.event.broker.BrokerEventListener;
 import org.openmrs.event.broker.BrokerIncomingEvent;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -25,12 +27,18 @@ public class BrokerEventTestListener {
     public static final String TEST_QUEUE = "integration.test.topic";
     public static final String RETRY_QUEUE = "integration.test.retry.topic";
     public static final String DLQ_TEST_QUEUE = "integration.test.dlq.topic";
+    public static final String INPUTSTREAM_QUEUE = "integration.test.inputstream.topic";
+    public static final String RUNTIME_QUEUE = "integration.test.runtime.topic";
+    public static final String EVENTPAYLOAD_QUEUE = "integration.test.eventpayload.topic";
 
     private CountDownLatch latch = new CountDownLatch(1);
 
     private List<BrokerIncomingEvent<?>> receivedEvents = new CopyOnWriteArrayList<>();
     private AtomicInteger attempts = new AtomicInteger(0);
     private AtomicInteger dlqAttempts = new AtomicInteger(0);
+    private volatile byte[] receivedInputStreamBytes;
+    private volatile String receivedRuntimePayload;
+    private volatile SimpleEventPayload receivedEventPayload;
 
     @BrokerEventListener(value = TEST_QUEUE, broker = Artemis.BROKER_ID)
     public void brokerEvent(BrokerIncomingEvent<String> event) {
@@ -66,6 +74,32 @@ public class BrokerEventTestListener {
         latch.countDown();
     }
 
+    // Plain @EventListener (no source filter) — simulates the Spring-side listener a runtime module provides.
+    // Source filtering is done in the method body because @BrokerEventListener is not called dynamically in tests.
+    @org.springframework.context.event.EventListener
+    public void runtimeBrokerEvent(BrokerIncomingEvent<String> event) {
+        if (RUNTIME_QUEUE.equals(event.getSource())) {
+            receivedRuntimePayload = (String) event.getPayload();
+            latch.countDown();
+        }
+    }
+
+    @BrokerEventListener(value = EVENTPAYLOAD_QUEUE, broker = Artemis.BROKER_ID)
+    public void brokerEventPayloadEvent(BrokerIncomingEvent<SimpleEventPayload> event) {
+        receivedEventPayload = (SimpleEventPayload) event.getPayload();
+        latch.countDown();
+    }
+
+    @BrokerEventListener(value = INPUTSTREAM_QUEUE, broker = Artemis.BROKER_ID)
+    public void brokerInputStreamEvent(BrokerIncomingEvent<InputStream> event) throws IOException {
+        if (event.getPayload() instanceof InputStream) {
+            try (InputStream is = (InputStream) event.getPayload()) {
+                receivedInputStreamBytes = is.readAllBytes();
+            }
+            latch.countDown();
+        }
+    }
+
     public List<BrokerIncomingEvent<?>> getReceivedEvents() {
         return receivedEvents;
     }
@@ -75,6 +109,9 @@ public class BrokerEventTestListener {
         this.latch = new CountDownLatch(count);
         this.attempts.set(0);
         this.dlqAttempts.set(0);
+        this.receivedInputStreamBytes = null;
+        this.receivedRuntimePayload = null;
+        this.receivedEventPayload = null;
     }
 
     public boolean await(int timeout, TimeUnit unit) throws InterruptedException {
@@ -87,5 +124,17 @@ public class BrokerEventTestListener {
 
     public int getDlqAttempts() {
         return dlqAttempts.get();
+    }
+
+    public byte[] getReceivedInputStreamBytes() {
+        return receivedInputStreamBytes;
+    }
+
+    public String getReceivedRuntimePayload() {
+        return receivedRuntimePayload;
+    }
+
+    public SimpleEventPayload getReceivedEventPayload() {
+        return receivedEventPayload;
     }
 }
