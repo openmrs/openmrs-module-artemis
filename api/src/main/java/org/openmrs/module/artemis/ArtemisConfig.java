@@ -14,8 +14,11 @@ import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jms.connection.CachingConnectionFactory;
 import org.springframework.jms.core.JmsTemplate;
+
+import javax.jms.ConnectionFactory;
 
 @Configuration("artemis.ArtemisConfig")
 public class ArtemisConfig {
@@ -46,19 +49,22 @@ public class ArtemisConfig {
 		return amqFactory;
 	}
 	
-	@Bean("artemis.ConnectionFactory")
-	public CachingConnectionFactory connectionFactory(@Qualifier("artemis.Artemis") Artemis artemis) {
-		return new CachingConnectionFactory(createBaseFactory(artemis));
-	}
-	
+	/**
+	 * Use it for listeners, if needed.
+	 * 
+	 * @param artemis
+	 * @return ConnectionFactory
+	 */
+	@Primary
 	@Bean("artemis.ListenerConnectionFactory")
 	public ActiveMQConnectionFactory listenerConnectionFactory(@Qualifier("artemis.Artemis") Artemis artemis) {
 		return createBaseFactory(artemis);
 	}
 	
+	@Primary
 	@Bean("artemis.JmsTemplate")
-	public JmsTemplate jmsTemplate(@Qualifier("artemis.ConnectionFactory") CachingConnectionFactory connectionFactory) {
-		JmsTemplate jmsTemplate = new JmsTemplate(connectionFactory);
+	public JmsTemplate jmsTemplate(@Qualifier("artemis.ListenerConnectionFactory") ConnectionFactory connectionFactory) {
+		JmsTemplate jmsTemplate = new JmsTemplate(new CachingConnectionFactory(connectionFactory));
 		jmsTemplate.setExplicitQosEnabled(true);
 		jmsTemplate.setDeliveryPersistent(true);
 		return jmsTemplate;
